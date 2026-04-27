@@ -29,12 +29,13 @@ const ProjectDetailPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const [projectData, reposData] = await Promise.all([
+      // const [projectData, reposData] = await Promise.all([
+      const [projectData] = await Promise.all([
         projectService.getProject(projectId),
-        projectService.getRepositories(projectId),
+        // projectService.getRepositories(projectId),
       ]);
       setProject(projectData);
-      setRepositories(reposData);
+      // setRepositories(reposData);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load project');
       toast.error('Failed to load project');

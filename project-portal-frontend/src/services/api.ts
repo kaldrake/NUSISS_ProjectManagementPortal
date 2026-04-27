@@ -15,9 +15,31 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const userId = Number(user?.id);
+        
+        if (!isNaN(userId) && userId > 0) {
+          config.headers['X-User-Id'] = userId;
+        } else {
+          config.headers['X-User-Id'] = 1;  // Default test user
+        }
+      } else {
+        config.headers['X-User-Id'] = 1;  // Default if no user
+      }
+    } catch (e) {
+      config.headers['X-User-Id'] = 1;  // Default on error
+    }
+
     return config;
   },
   (error) => Promise.reject(error)

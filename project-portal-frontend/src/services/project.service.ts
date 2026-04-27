@@ -14,8 +14,17 @@ export const projectService = {
     return response.data;
   },
 
-  async createProject(data: { name: string; description?: string }): Promise<Project> {
-    const response = await api.post<Project>('/projects', data);
+  async createProject(data: { name: string; description?: string; repositoryUrl?: string; repositoryName?: string }): Promise<Project> {
+    
+    // Get user ID from localStorage
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    
+    const response = await api.post<Project>('/projects', data, {
+      headers: {
+        'X-User-Id': user ? user.id : 1
+      }
+    });
     return response.data;
   },
 
@@ -66,4 +75,5 @@ export const projectService = {
     const response = await api.get<Scan[]>(`/repositories/${repoId}/scans`);
     return response.data;
   },
+  
 };
