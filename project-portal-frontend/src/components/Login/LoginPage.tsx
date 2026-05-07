@@ -94,30 +94,6 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // Test bypass function - FIXED to store properly
-  const handleBypassLogin = () => {
-    // Create a mock user
-    const mockUser = {
-      id: 'test-user-123',
-      username: 'testuser',
-      email: 'test@example.com',
-      role: 'ADMIN' as const,
-      githubId: 12345,
-    };
-    
-    // Create a mock token
-    const mockToken = 'mock-jwt-token-for-testing';
-    
-    // Store in localStorage
-    authService.setToken(mockToken);
-    authService.setUser(mockUser);
-    
-    toast.success('Bypass login successful! (Testing mode)');
-    
-    // Force a hard reload to reset the auth state
-    window.location.href = '/dashboard';
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
@@ -277,16 +253,6 @@ const LoginPage: React.FC = () => {
             </button>
           </form>
         )}
-
-        {/* Test Bypass Button - ONLY FOR DEVELOPMENT */}
-        <div className="mt-4">
-          <button
-            onClick={handleBypassLogin}
-            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg transition"
-          >
-            🧪 Bypass Login (Testing Only)
-          </button>
-        </div>
 
         {/* Demo Credentials Hint */}
         <div className="mt-6 pt-4 border-t border-gray-200">
