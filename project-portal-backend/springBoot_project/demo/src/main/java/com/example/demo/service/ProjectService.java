@@ -43,12 +43,12 @@ public class ProjectService {
     }
     
     // Create new project
-    public ProjectResponseDTO createProject(ProjectCreateDTO createDTO, String ownerId) {
+    public ProjectResponseDTO createProject(ProjectCreateDTO createDTO, Long ownerId) {
         // Check if project with same name exists for this owner
         if (projectRepository.existsByNameAndOwnerId(createDTO.getName(), ownerId)) {
             throw new RuntimeException("Project with name '" + createDTO.getName() + "' already exists");
         }
-        
+
         // Create entity from DTO
         Project project = new Project(
             createDTO.getName(),
