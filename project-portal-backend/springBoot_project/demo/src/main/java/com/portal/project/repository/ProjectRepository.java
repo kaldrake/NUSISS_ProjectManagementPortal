@@ -1,9 +1,11 @@
 // src/main/java/com/example/demo/repository/ProjectRepository.java
-package com.example.demo.repository;
+package com.portal.project.repository;
 
-import com.example.demo.entity.Project;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+
+import com.portal.project.entity.Project;
+
 import java.util.List;
 
 @Repository

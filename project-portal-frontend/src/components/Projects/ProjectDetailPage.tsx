@@ -3,7 +3,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { projectService } from '../../services/project.service';
-import { Project, Repository } from '../../types';
+import { scanService } from '../../services/scan.service';
+import { Project, Repository, Vulnerability } from '../../types';
 import RepositoryList from './RepositoryList';
 import VulnerabilityList from './VulnerabilityList';
 import AddRepositoryModal from './AddRepositoryModal';
@@ -17,36 +18,37 @@ const ProjectDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('repositories');
   const [isAddRepoModalOpen, setIsAddRepoModalOpen] = useState(false);
 
-  // Wrap fetchProjectData in useCallback to fix dependency warning
   const fetchProjectData = useCallback(async () => {
     if (!projectId) return;
     
     try {
       setLoading(true);
       setError(null);
-      // const [projectData, reposData] = await Promise.all([
-      const [projectData] = await Promise.all([
+      const [projectData, reposData, vulnsData] = await Promise.all([
         projectService.getProject(projectId),
-        // projectService.getRepositories(projectId),
+        projectService.getRepositories(projectId),
+        scanService.getVulnerabilitiesByProject(projectId),
       ]);
       setProject(projectData);
-      // setRepositories(reposData);
+      setRepositories(reposData);
+      setVulnerabilities(vulnsData);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load project');
       toast.error('Failed to load project');
     } finally {
       setLoading(false);
     }
-  }, [projectId]); // Add projectId as dependency
+  }, [projectId]);
 
   useEffect(() => {
     fetchProjectData();
-  }, [fetchProjectData]); // Add fetchProjectData to dependency array
+  }, [fetchProjectData]);
 
   const handleDeleteProject = async () => {
     const userConfirmed = window.confirm(`Are you sure you want to delete "${project?.name}"? This will remove all repositories and scan data.`);
@@ -158,6 +160,7 @@ const ProjectDetailPage: React.FC = () => {
       <div>
         {activeTab === 'repositories' && (
           <RepositoryList
+            projectId={projectId!}
             repositories={repositories}
             onAddRepo={() => setIsAddRepoModalOpen(true)}
             onScanTriggered={handleScanTriggered}
@@ -166,7 +169,12 @@ const ProjectDetailPage: React.FC = () => {
         )}
         
         {activeTab === 'vulnerabilities' && (
-          <VulnerabilityList repositories={repositories} />
+          <VulnerabilityList
+            projectId={projectId!}
+            repositories={repositories}
+            vulnerabilities={vulnerabilities}
+            onRefresh={fetchProjectData}
+          />
         )}
         
         {activeTab === 'settings' && (
@@ -183,7 +191,9 @@ const ProjectDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Last Updated</label>
-                <p className="text-gray-600">{new Date(project.updatedAt).toLocaleString()}</p>
+                <p className="text-gray-600">
+                  {project.updatedAt ? new Date(project.updatedAt).toLocaleString() : 'Never'}
+                </p>
               </div>
               <div className="pt-4 border-t border-gray-200">
                 <button

@@ -1,6 +1,6 @@
 // src/components/Projects/ProjectsPage.tsx
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';  // ← Added useLocation, useNavigate
 import { projectService } from '../../services/project.service';
 import { Project } from '../../types';
 import CreateProjectModal from './CreateProjectModal';
@@ -8,17 +8,25 @@ import LoadingSpinner from '../Common/LoadingSpinner';
 import ErrorAlert from '../Common/ErrorAlert';
 import toast from 'react-hot-toast';
 
+interface LocationState {
+  openModal?: boolean;
+}
+
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  
+  // Move hooks to top (before they're used)
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Cast location.state to your type
+  const locationState = location.state as LocationState;
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const fetchProjects = async () => {
+  // Wrap fetchProjects in useCallback to prevent infinite loop
+  const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -31,7 +39,18 @@ const ProjectsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+
+    // Use locationState instead of location.state
+    if (locationState?.openModal) {
+      setIsCreateModalOpen(true);
+      // Clear the state so modal doesn't reopen on refresh
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, locationState, fetchProjects, navigate]);  // ← Fixed dependencies
 
   const handleProjectCreated = () => {
     fetchProjects();
@@ -39,7 +58,6 @@ const ProjectsPage: React.FC = () => {
   };
 
   const handleDeleteProject = async (projectId: string, projectName: string) => {
-    // Use window.confirm instead of confirm to avoid ESLint error
     const userConfirmed = window.confirm(`Are you sure you want to delete "${projectName}"? This will remove all repositories and scan data.`);
     
     if (!userConfirmed) {

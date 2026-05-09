@@ -4,7 +4,7 @@ import Select from 'react-select';
 import toast from 'react-hot-toast';
 import { projectService } from '../../services/project.service';
 import { githubService } from '../../services/github.service';
-import { GitHubRepository, Repository } from '../../types';
+import { Repository } from '../../types';
 
 interface AddRepositoryModalProps {
   isOpen: boolean;
@@ -14,6 +14,16 @@ interface AddRepositoryModalProps {
   existingRepos: Repository[];
 }
 
+interface GitHubRepoOption {
+  id: number;
+  full_name: string;
+  html_url: string;
+  default_branch: string;
+  language: string | null;
+  private: boolean;
+  description: string | null;  // ✅ Added missing property
+}
+
 const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
   isOpen,
   onClose,
@@ -21,19 +31,17 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
   projectId,
   existingRepos,
 }) => {
-  const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepository | null>(null);
+  const [repositories, setRepositories] = useState<GitHubRepoOption[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoOption | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
 
-  // Wrap fetchRepositories in useCallback to fix dependency warning
   const fetchRepositories = useCallback(async () => {
     try {
       setLoading(true);
       const repos = await githubService.getRepositories();
-      // Filter out already added repos
       const existingFullNames = new Set(existingRepos.map((r: Repository) => r.repoFullName));
-      const availableRepos = repos.filter((r: GitHubRepository) => !existingFullNames.has(r.full_name));
+      const availableRepos = repos.filter((r: GitHubRepoOption) => !existingFullNames.has(r.full_name));
       setRepositories(availableRepos);
     } catch (err) {
       toast.error('Failed to load GitHub repositories');
@@ -41,13 +49,13 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [existingRepos, onClose]); // Add dependencies
+  }, [existingRepos, onClose]);
 
   useEffect(() => {
     if (isOpen) {
       fetchRepositories();
     }
-  }, [isOpen, fetchRepositories]); // Add fetchRepositories to dependency array
+  }, [isOpen, fetchRepositories]);
 
   const handleAdd = async () => {
     if (!selectedRepo) {
@@ -72,7 +80,7 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const options = repositories.map((repo: GitHubRepository) => ({
+  const options = repositories.map((repo) => ({
     value: repo,
     label: `${repo.full_name} • ${repo.language || 'Unknown'} • ${repo.private ? 'Private' : 'Public'}`,
   }));

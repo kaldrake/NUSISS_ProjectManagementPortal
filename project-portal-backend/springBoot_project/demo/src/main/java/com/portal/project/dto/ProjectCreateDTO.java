@@ -1,5 +1,5 @@
-// src/main/java/com/example/demo/dto/request/ProjectCreateDTO.java
-package com.example.demo.dto.request;
+// project-service/src/main/java/com/portal/project/dto/ProjectCreateDTO.java
+package com.portal.project.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -12,10 +12,6 @@ public class ProjectCreateDTO {
     
     @Size(max = 1000, message = "Description cannot exceed 1000 characters")
     private String description;
-    
-    private String repositoryUrl;
-    
-    private String repositoryName;
     
     // Getters and Setters
     public String getName() {
@@ -32,21 +28,5 @@ public class ProjectCreateDTO {
     
     public void setDescription(String description) {
         this.description = description;
-    }
-    
-    public String getRepositoryUrl() {
-        return repositoryUrl;
-    }
-    
-    public void setRepositoryUrl(String repositoryUrl) {
-        this.repositoryUrl = repositoryUrl;
-    }
-    
-    public String getRepositoryName() {
-        return repositoryName;
-    }
-    
-    public void setRepositoryName(String repositoryName) {
-        this.repositoryName = repositoryName;
     }
 }

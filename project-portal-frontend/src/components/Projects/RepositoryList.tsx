@@ -2,11 +2,10 @@
 import React, { useState } from 'react';
 import { Repository } from '../../types';
 import { projectService } from '../../services/project.service';
-// Remove this line - SeverityBadge is not used
-// import SeverityBadge from '../Common/SeverityBadge';
 import toast from 'react-hot-toast';
 
 interface RepositoryListProps {
+  projectId: string;
   repositories: Repository[];
   onAddRepo: () => void;
   onScanTriggered: () => void;
@@ -14,6 +13,7 @@ interface RepositoryListProps {
 }
 
 const RepositoryList: React.FC<RepositoryListProps> = ({
+  projectId,
   repositories,
   onAddRepo,
   onScanTriggered,
@@ -24,7 +24,7 @@ const RepositoryList: React.FC<RepositoryListProps> = ({
   const handleTriggerScan = async (repoId: string) => {
     setScanningRepoId(repoId);
     try {
-      await projectService.triggerScan(repoId);
+      await projectService.triggerScan(projectId, repoId);
       toast.success('Scan triggered successfully');
       onScanTriggered();
     } catch (err) {
@@ -40,7 +40,7 @@ const RepositoryList: React.FC<RepositoryListProps> = ({
     if (!userConfirmed) return;
     
     try {
-      await projectService.removeRepository(repositories[0].projectId, repoId);
+      await projectService.removeRepository(projectId, repoId);
       toast.success('Repository removed');
       onRefresh();
     } catch (err) {
@@ -109,18 +109,11 @@ const RepositoryList: React.FC<RepositoryListProps> = ({
                     <span>Last scan: {new Date(repo.lastScanAt).toLocaleString()}</span>
                   )}
                 </div>
-                {(repo.criticalCount !== undefined || repo.majorCount !== undefined) && (
+                {(repo.criticalCount !== undefined && repo.criticalCount > 0) && (
                   <div className="flex items-center gap-3 mt-2">
-                    {repo.criticalCount !== undefined && repo.criticalCount > 0 && (
-                      <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
-                        {repo.criticalCount} critical
-                      </span>
-                    )}
-                    {repo.majorCount !== undefined && repo.majorCount > 0 && (
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
-                        {repo.majorCount} major
-                      </span>
-                    )}
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                      {repo.criticalCount} critical
+                    </span>
                   </div>
                 )}
               </div>

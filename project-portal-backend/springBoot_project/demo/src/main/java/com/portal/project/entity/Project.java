@@ -1,11 +1,11 @@
 // src/main/java/com/example/demo/entity/Project.java
-package com.example.demo.entity;
+package com.portal.project.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "project")
+@Table(name = "projects")
 public class Project {
     
     @Id
@@ -20,12 +20,6 @@ public class Project {
     
     @Column(name = "owner_id", nullable = false)
     private Long ownerId;
-    
-    @Column(name = "repository_url")
-    private String repositoryUrl;
-    
-    @Column(name = "repository_name")
-    private String repositoryName;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -77,23 +71,7 @@ public class Project {
     public void setOwnerId(Long ownerId) {
         this.ownerId = ownerId;
     }
-    
-    public String getRepositoryUrl() {
-        return repositoryUrl;
-    }
-    
-    public void setRepositoryUrl(String repositoryUrl) {
-        this.repositoryUrl = repositoryUrl;
-    }
-    
-    public String getRepositoryName() {
-        return repositoryName;
-    }
-    
-    public void setRepositoryName(String repositoryName) {
-        this.repositoryName = repositoryName;
-    }
-    
+        
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -109,4 +87,12 @@ public class Project {
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
+
+	@Override
+	public String toString() {
+		return "Project [id=" + id + ", name=" + name + ", description=" + description + ", ownerId=" + ownerId
+				+ ", createdAt=" + createdAt + ", updatedAt=" + updatedAt + "]";
+	}
+
+    
 }
