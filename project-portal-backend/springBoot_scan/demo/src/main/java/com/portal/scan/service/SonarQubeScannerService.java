@@ -22,7 +22,7 @@ public class SonarQubeScannerService {
     
     private static final Logger log = LoggerFactory.getLogger(SonarQubeScannerService.class);
     
-    @Value("${sonar.host.url:http://localhost:9000}")
+    @Value("${sonar.host.url:http://localhost:9001}")
     private String sonarHostUrl;
     
     @Value("${sonar.token:}")
@@ -54,11 +54,24 @@ public class SonarQubeScannerService {
         
         Process process = pb.start();
         
-        if(process.waitFor(2, TimeUnit.MINUTES))        {
-        	int exitCode = process.exitValue();
-
-        	if (exitCode != 0) 
-	            throw new RuntimeException("Git clone failed with exit code: " + exitCode);
+        // Read output for debugging
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                log.info("Git: {}", line);
+            }
+        }
+        
+        boolean completed = process.waitFor(2, TimeUnit.MINUTES);
+        
+        if (!completed) {
+            process.destroyForcibly();
+            throw new RuntimeException("Git clone timed out after 2 minutes");
+        }
+        
+        int exitCode = process.exitValue();
+        if (exitCode != 0) {
+            throw new RuntimeException("Git clone failed with exit code: " + exitCode);
         }
         
         log.info("Cloned repository to: {}", repoPath);
@@ -66,31 +79,56 @@ public class SonarQubeScannerService {
     }
     
     private void runSonarScanner(String repoPath, String projectKey) throws Exception {
+        String hostIp = getHostIp(); // Method to get your IP
+        String sonarHost = "http://" + hostIp + ":9001";
+        
+        log.info("=== Starting SonarScanner ===");
+        log.info("Project key: {}", projectKey);
+        log.info("Repo path: {}", repoPath);
+        log.info("SonarQube host: {}", sonarHost);
+        
+        
         ProcessBuilder pb = new ProcessBuilder(
-            "sonar-scanner",
+            "docker", "run", "--rm",
+            "-v", repoPath + ":/usr/src",
+            "sonarsource/sonar-scanner-cli",
             "-Dsonar.projectKey=" + projectKey,
             "-Dsonar.sources=.",
-            "-Dsonar.host.url=" + sonarHostUrl,
-            "-Dsonar.login=" + sonarToken
+            "-Dsonar.java.binaries=.",  
+            "-Dsonar.host.url=" + sonarHost,
+            "-Dsonar.login=" + sonarToken,
+            "-X"  // Add debug mode
         );
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
         
         Process process = pb.start();
         
+        // Capture ALL output
+        StringBuilder output = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                log.debug("SonarScanner: {}", line);
+                output.append(line).append("\n");
+                log.info("SonarScanner: {}", line);
             }
         }
         
-        boolean exitCode = process.waitFor(5, TimeUnit.MINUTES);
-        if (exitCode) {
-            throw new RuntimeException("SonarScanner failed with exit code: " + exitCode);
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            log.error("SonarScanner failed with exit code: {}", exitCode);
+            log.error("Full output:\n{}", output.toString());
+            throw new RuntimeException("SonarScanner failed with exit code: " + exitCode + "\nOutput: " + output);
         }
-        
-        log.info("SonarScanner completed for project: {}", projectKey);
+    }
+
+    private String getHostIp() {
+        try {
+            java.net.InetAddress localHost = java.net.InetAddress.getLocalHost();
+            return localHost.getHostAddress();
+        } catch (Exception e) {
+            return "192.168.1.100"; // fallback
+        }
     }
     
     private void waitForAnalysis(String projectKey) throws Exception {
@@ -126,13 +164,21 @@ public class SonarQubeScannerService {
     
     private List<SonarQubeIssue> fetchIssues(String projectKey) throws Exception {
         String url = sonarHostUrl + "/api/issues/search?componentKeys=" + projectKey + 
-                     "&types=VULNERABILITY,SECURITY_HOTSPOT&ps=500&resolved=false";
+                     "&types=VULNERABILITY&ps=500&resolved=false";
+        
+        log.info("Fetching issues from: {}", url);
+        
         HttpHeaders headers = new HttpHeaders();
         headers.setBasicAuth(sonarToken, "");
         
         ResponseEntity<String> response = restTemplate.exchange(
             url, HttpMethod.GET, new HttpEntity<>(headers), String.class
         );
+        
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            log.error("Failed to fetch issues. Status: {}", response.getStatusCode());
+            return new ArrayList<>();
+        }
         
         JsonNode root = objectMapper.readTree(response.getBody());
         JsonNode issues = root.path("issues");
@@ -143,7 +189,15 @@ public class SonarQubeScannerService {
             sqIssue.setRuleId(issue.path("rule").asText());
             sqIssue.setType(issue.path("type").asText());
             sqIssue.setSeverity(issue.path("severity").asText());
-            sqIssue.setFilePath(issue.path("component").asText());
+            
+            // Extract file path from component (format: projectKey:file/path)
+            String component = issue.path("component").asText();
+            if (component.contains(":")) {
+                sqIssue.setFilePath(component.substring(component.indexOf(":") + 1));
+            } else {
+                sqIssue.setFilePath(component);
+            }
+            
             sqIssue.setLineNumber(issue.path("line").asInt());
             sqIssue.setMessage(issue.path("message").asText());
             result.add(sqIssue);

@@ -81,7 +81,14 @@ public class ScanController {
      */
     @PostMapping("/scans/analyze")
     public ResponseEntity<ScanResponseDTO> analyzeRepository(@Valid @RequestBody ScanRequestDTO request) {
-        ScanResponseDTO response = scanService.scanRepository(request);
+        scanService.scanRepository(request);
+        
+        // Create response object
+        ScanResponseDTO response = new ScanResponseDTO();
+        response.setStatus("ACCEPTED");
+        response.setMessage("Scan started successfully");
+        response.setProjectId(request.getProjectId());
+        response.setRepositoryId(request.getRepositoryId());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
     
@@ -158,6 +165,7 @@ public class ScanController {
         DashboardSummaryDTO summary = scanService.getDashboardSummary(projectId);
         return ResponseEntity.ok(summary);
     }
+    
     
     // =============================================
     // HELPER METHODS

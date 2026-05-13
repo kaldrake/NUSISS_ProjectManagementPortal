@@ -28,6 +28,8 @@ public class DeepSeekService {
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	public String generateFixSuggestion(Vulnerability vulnerability) {
+		
+		log.info("in generate fix suggestion");		
 		if (apiKey == null || apiKey.isEmpty()) {
 			log.warn("DeepSeek API key not configured, returning default suggestion");
 			return getDefaultSuggestion(vulnerability);

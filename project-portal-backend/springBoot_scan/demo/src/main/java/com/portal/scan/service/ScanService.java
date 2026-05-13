@@ -37,7 +37,7 @@ public class ScanService {
     
     @Async
     @Transactional
-    public ScanResponseDTO scanRepository(ScanRequestDTO request) {
+    public void scanRepository(ScanRequestDTO request) {
         log.info("Starting scan for project {} repository {}", request.getProjectId(), request.getRepositoryId());
         
         Scan scan = new Scan(
@@ -61,6 +61,10 @@ public class ScanService {
             );
             
             for (SonarQubeIssue issue : issues) {
+            	log.info("=== Processing issue ===");
+                log.info("Issue severity: '{}'", issue.getSeverity());
+                log.info("Is critical? {}", isCriticalSeverity(issue.getSeverity()));
+                
                 Vulnerability vuln = new Vulnerability(
                     scan,
                     issue.getRuleId(),
@@ -74,7 +78,9 @@ public class ScanService {
                 
                 if (isCriticalSeverity(issue.getSeverity())) {
                     try {
+                    	 log.info(">>> CALLING DEEPSEEK NOW <<<");
                         String suggestionText = deepSeekService.generateFixSuggestion(vuln);
+                        log.info("DeepSeek returned: {}", suggestionText);
                         AiSuggestion aiSuggestion = new AiSuggestion(vuln, suggestionText, "");
                         aiSuggestionRepository.save(aiSuggestion);
                         Thread.sleep(500);
@@ -97,7 +103,7 @@ public class ScanService {
             response.setStatus("COMPLETED");
             response.setMessage("Scan completed successfully");
             
-            return response;
+//            return response;
             
         } catch (Exception e) {
             log.error("Scan failed: {}", e.getMessage(), e);
@@ -113,7 +119,7 @@ public class ScanService {
             response.setStatus("FAILED");
             response.setMessage(e.getMessage());
             
-            return response;
+//            return response;
         }
     }
     
@@ -258,6 +264,8 @@ public class ScanService {
     }
     
     private boolean isCriticalSeverity(String severity) {
-        return "BLOCKER".equals(severity) || "CRITICAL".equals(severity);
+        boolean result = "BLOCKER".equals(severity) || "CRITICAL".equals(severity);
+        log.info("Severity '{}' is critical? {}", severity, result);
+        return result;
     }
 }
