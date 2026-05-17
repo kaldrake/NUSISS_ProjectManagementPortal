@@ -1,27 +1,22 @@
 // src/components/Projects/AddRepositoryModal.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import Select from 'react-select';
+import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { projectService } from '../../services/project.service';
-import { githubService } from '../../services/github.service';
-import { Repository } from '../../types';
 
 interface AddRepositoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   projectId: string;
-  existingRepos: Repository[];
+  existingRepos: any[];
 }
 
-interface GitHubRepoOption {
+interface RepoInfo {
   id: number;
-  full_name: string;
-  html_url: string;
-  default_branch: string;
-  language: string | null;
-  private: boolean;
-  description: string | null;  // ✅ Added missing property
+  name: string;
+  fullName: string;
+  cloneUrl: string;
+  defaultBranch: string;
 }
 
 const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
@@ -31,59 +26,104 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
   projectId,
   existingRepos,
 }) => {
-  const [repositories, setRepositories] = useState<GitHubRepoOption[]>([]);
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoOption | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
+  const [repoUrl, setRepoUrl] = useState('');
+  const [repoBranch, setRepoBranch] = useState('master');
+  const [loading, setLoading] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [repoValid, setRepoValid] = useState(false);
+  const [repoInfo, setRepoInfo] = useState<RepoInfo | null>(null);
 
-  const fetchRepositories = useCallback(async () => {
-    try {
-      setLoading(true);
-      const repos = await githubService.getRepositories();
-      const existingFullNames = new Set(existingRepos.map((r: Repository) => r.repoFullName));
-      const availableRepos = repos.filter((r: GitHubRepoOption) => !existingFullNames.has(r.full_name));
-      setRepositories(availableRepos);
-    } catch (err) {
-      toast.error('Failed to load GitHub repositories');
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  }, [existingRepos, onClose]);
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchRepositories();
-    }
-  }, [isOpen, fetchRepositories]);
-
-  const handleAdd = async () => {
-    if (!selectedRepo) {
-      toast.error('Please select a repository');
+  const handleValidateRepo = async () => {
+    if (!repoUrl.trim()) {
+      toast.error('Please enter a repository URL');
       return;
     }
 
-    setAdding(true);
+    setValidating(true);
     try {
+      let url = repoUrl.trim();
+      if (url.endsWith('.git')) {
+        url = url.slice(0, -4);
+      }
+      
+      const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+      if (!match) {
+        toast.error('Invalid GitHub URL format');
+        setRepoValid(false);
+        return;
+      }
+      
+      const owner = match[1];
+      const repo = match[2];
+      
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setRepoInfo({
+          id: data.id,
+          name: data.name,
+          fullName: data.full_name,
+          cloneUrl: data.clone_url,
+          defaultBranch: data.default_branch
+        });
+        setRepoValid(true);
+        toast.success(`Repository "${data.full_name}" is valid!`);
+      } else {
+        setRepoValid(false);
+        toast.error('Repository not found or not accessible');
+      }
+    } catch (error) {
+      console.error('Validation error:', error);
+      setRepoValid(false);
+      toast.error('Failed to validate repository');
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!repoUrl.trim()) {
+      toast.error('Please enter a repository URL');
+      return;
+    }
+
+    if (!repoValid || !repoInfo) {
+      toast.error('Please validate the repository URL first');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Match the exact parameter names expected by the backend
       await projectService.addRepository(projectId, {
-        repoFullName: selectedRepo.full_name,
-        repoUrl: selectedRepo.html_url,
-        defaultBranch: selectedRepo.default_branch,
+        githubRepoId: repoInfo.id,
+        repoFullName: repoInfo.fullName,
+        repoName: repoInfo.name,
+        repoUrl: repoUrl,
+        cloneUrl: repoInfo.cloneUrl,
+        defaultBranch: repoBranch || repoInfo.defaultBranch,
       });
+      
+      toast.success('Repository added successfully');
       onSuccess();
+      onClose();
+      
+      // Reset form
+      setRepoUrl('');
+      setRepoBranch('main');
+      setRepoValid(false);
+      setRepoInfo(null);
+      
     } catch (err: any) {
+      console.error('Add repository error:', err);
       toast.error(err.response?.data?.message || 'Failed to add repository');
     } finally {
-      setAdding(false);
+      setLoading(false);
     }
   };
 
   if (!isOpen) return null;
-
-  const options = repositories.map((repo) => ({
-    value: repo,
-    label: `${repo.full_name} • ${repo.language || 'Unknown'} • ${repo.private ? 'Private' : 'Public'}`,
-  }));
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -97,55 +137,65 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
                 Add GitHub Repository
               </h3>
 
-              {loading ? (
-                <div className="flex justify-center py-8">
-                  <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : repositories.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500">No available repositories</p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    All your GitHub repositories have been added already
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Repository
-                  </label>
-                  <Select
-                    options={options}
-                    onChange={(option) => setSelectedRepo(option?.value || null)}
-                    placeholder="Search your repositories..."
-                    className="react-select-container"
-                    classNamePrefix="react-select"
+              {/* Repository URL Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Repository URL *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={repoUrl}
+                    onChange={(e) => {
+                      setRepoUrl(e.target.value);
+                      setRepoValid(false);
+                      setRepoInfo(null);
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="https://github.com/username/repository"
                   />
+                  <button
+                    type="button"
+                    onClick={handleValidateRepo}
+                    disabled={validating || !repoUrl}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {validating ? '...' : 'Validate'}
+                  </button>
+                </div>
+                {repoValid && repoInfo && (
+                  <p className="text-green-600 text-sm mt-1">
+                    ✓ {repoInfo.fullName}
+                  </p>
+                )}
+              </div>
 
-                  {selectedRepo && (
-                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium">Default branch:</span> {selectedRepo.default_branch}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium">Visibility:</span> {selectedRepo.private ? 'Private' : 'Public'}
-                      </p>
-                      {selectedRepo.description && (
-                        <p className="text-sm text-gray-500 mt-1">{selectedRepo.description}</p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
+              {/* Branch (optional) */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Branch (optional)
+                </label>
+                <input
+                  type="text"
+                  value={repoBranch}
+                  onChange={(e) => setRepoBranch(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="main"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Default: {repoInfo?.defaultBranch || 'master'}
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
             <button
               onClick={handleAdd}
-              disabled={!selectedRepo || adding || loading || repositories.length === 0}
+              disabled={loading || !repoValid}
               className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {adding ? 'Adding...' : 'Add Repository'}
+              {loading ? 'Adding...' : 'Add Repository'}
             </button>
             <button
               onClick={onClose}

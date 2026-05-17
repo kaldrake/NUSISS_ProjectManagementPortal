@@ -83,11 +83,12 @@ public class ProjectService {
         if (projectRepository.existsByNameAndOwnerId(createDTO.getName(), ownerId)) {
             throw new RuntimeException("Project with name '" + createDTO.getName() + "' already exists");
         }
-        
+        LocalDateTime currTS = LocalDateTime.now();
         Project project = new Project();
         project.setName(createDTO.getName());
         project.setDescription(createDTO.getDescription());
         project.setOwnerId(ownerId);
+        project.setCreatedAt(currTS);
         
         Project savedProject = projectRepository.save(project);
         log.info("Project created successfully with ID: {}", savedProject.getId());

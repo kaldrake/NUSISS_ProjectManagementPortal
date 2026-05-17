@@ -98,7 +98,16 @@ export interface Vulnerability {
     message: string;
     status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'FALSE_POSITIVE';
     createdAt: string;
-    aiSuggestion?: string;
+    aiSuggestion?: AiSuggestion | string;  // ← Allow both types
+}
+
+export interface AiSuggestion {
+    id: string;
+    suggestionText: string;
+    codeExample?: string;
+    confidenceScore: number;
+    modelUsed: string;
+    generatedAt: string;
 }
 
 // =============================================

@@ -40,15 +40,20 @@ export const projectService = {
         return response.data;
     },
 
-    async addRepository(projectId: string, data: { 
-        repoFullName: string; 
-        repoUrl: string; 
-        defaultBranch?: string 
-    }): Promise<Repository> {
-        const response = await projectApi.post<Repository>(`/projects/${projectId}/repositories`, data);
-        return response.data;
-    },
+// src/services/project.service.ts
 
+    // Update the addRepository method to accept the full repository data
+    async addRepository(projectId: string, data: { 
+    githubRepoId: number;
+    repoFullName: string;
+    repoName: string;
+    repoUrl: string;
+    cloneUrl: string;
+    defaultBranch?: string;
+    }): Promise<Repository> {
+    const response = await projectApi.post<Repository>(`/projects/${projectId}/repositories`, data);
+    return response.data;
+    },
     async removeRepository(projectId: string, repoId: string): Promise<void> {
         await projectApi.delete(`/projects/${projectId}/repositories/${repoId}`);
     },
