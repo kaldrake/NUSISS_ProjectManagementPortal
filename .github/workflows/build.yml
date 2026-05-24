@@ -1,0 +1,55 @@
+name: Combined Security Scans (Separate Frontend/Backend)
+on:
+  push:
+    branches: [main, feature-projectScan]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  # =============================================
+  # DEPENDENCY SCAN (Cross-platform Snyk)
+  # =============================================
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan Backend Dependencies (Login Microservice)
+        run: |
+          cd /project-portal-backend/springBoot_login
+          npx snyk test --file=pom.xml --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Scan Backend Dependencies (Project Microservice)
+        run: |
+          cd /project-portal-backend/springBoot_project
+          npx snyk test --file=pom.xml --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Scan Backend Dependencies (Scan Microservice)
+        run: |
+          cd /project-portal-backend/springBoot_scan
+          npx snyk test --file=pom.xml --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Scan Frontend Dependencies
+        run: |
+          cd project-portal-frontend
+          npx snyk test --file=package-lock.json --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Monitor All Dependencies
+        if: github.event_name == 'push'
+        run: |
+          cd backend && npx snyk monitor --file=pom.xml
+          cd ../frontend/common-queue-frontend && npx snyk monitor --file=package-lock.json
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
