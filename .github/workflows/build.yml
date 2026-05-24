@@ -75,7 +75,7 @@ jobs:
         run: ./mvnw dependency:resolve
 
       # =============================================
-      # BACKEND SNYK SCANS
+      # BACKEND/FRONTEND SNYK SCANS
       # =============================================
 
       - name: Scan Backend Dependencies (Login Microservice)
@@ -85,13 +85,19 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Scan Backend Dependencies (Project Microservice)
-        working-directory: project-portal-backend/springBoot_project/demos
+        working-directory: project-portal-backend/springBoot_project/demo
         run: snyk test --file=pom.xml --severity-threshold=high -d
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Scan Backend Dependencies (Scan Microservice)
-        working-directory: project-portal-backend/springBoot_scan/demos/
+        working-directory: project-portal-backend/springBoot_scan/demo
         run: snyk test --file=pom.xml --severity-threshold=high -d
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+       
+      - name: Scan Frontend Dependencies
+        working-directory: project-portal-frontend
+        run: snyk test --file=package-lock.json --severity-threshold=high
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
