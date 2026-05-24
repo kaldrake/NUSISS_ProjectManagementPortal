@@ -54,9 +54,9 @@ jobs:
 
       - name: Grant execute permission for Maven wrappers
         run: |
-          chmod +x springBoot_login/mvnw
-          chmod +x springBoot_project/mvnw
-          chmod +x springBoot_scan/mvnw
+          chmod +x springBoot_login/demo/mvnw
+          chmod +x springBoot_project/demo/mvnw
+          chmod +x springBoot_scan/demo/mvnw
 
       # =============================================
       # PRE-RESOLVE MAVEN DEPENDENCIES
