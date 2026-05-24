@@ -1,4 +1,4 @@
-name: Snyk Security Scans (Separate Frontend/Backend)
+name: Combined Security Scans (Separate Frontend/Backend)
 
 on:
   push:
@@ -48,20 +48,39 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles(format('{0}/pom.xml', matrix.service.path)) }}
           restore-keys: ${{ runner.os }}-m2
 
-      - name: Resolve dependencies (${{ matrix.service.name }})
+      - name: Debug environment (${{ matrix.service.name }})
         working-directory: ${{ matrix.service.path }}
-        run: mvn dependency:resolve
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Files in directory:"
+          ls -la
+          mvn --version
+          npx snyk --version || echo "Snyk not yet installed"
 
-      - name: Snyk test (${{ matrix.service.name }})
+      - name: Install Snyk globally
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ env.SNYK_TOKEN }}
+
+      - name: Resolve & Test Dependencies (${{ matrix.service.name }})
         working-directory: ${{ matrix.service.path }}
-        run: npx snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable
+        run: |
+          # Increase Node.js memory limit
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          
+          # Resolve Maven dependencies
+          mvn dependency:resolve
+          
+          # Run Snyk test
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
       - name: Snyk monitor (${{ matrix.service.name }})
         if: github.event_name == 'push'
         working-directory: ${{ matrix.service.path }}
-        run: npx snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
+        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
@@ -82,29 +101,47 @@ jobs:
           cache: 'npm'
           cache-dependency-path: project-portal-frontend/package-lock.json
 
+      - name: Debug frontend environment
+        working-directory: project-portal-frontend
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          node --version
+          npm --version
+
       - name: Install dependencies
         working-directory: project-portal-frontend
         run: npm ci
 
+      - name: Install Snyk globally
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ env.SNYK_TOKEN }}
+
       - name: Snyk test (Frontend)
         working-directory: project-portal-frontend
-        run: npx snyk test --severity-threshold=high --fail-on=upgradable
+        run: |
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          snyk test --severity-threshold=high --fail-on=upgradable
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
       - name: Snyk monitor (Frontend)
         if: github.event_name == 'push'
         working-directory: project-portal-frontend
-        run: npx snyk monitor --project-name=${{ github.repository }}-frontend
+        run: snyk monitor --project-name=${{ github.repository }}-frontend
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
   # =============================================
-  # CONSOLIDATED DEPENDENCY SCAN
+  # CONSOLIDATED DEPENDENCY SCAN (Runs after all scans, doesn't fail the workflow)
   # =============================================
   dependency-scan:
     name: Consolidated Dependency Scan
     runs-on: ubuntu-latest
+    needs: [backend-snyk, frontend-snyk]
+    if: always()
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -123,29 +160,36 @@ jobs:
       - name: Install Maven
         run: sudo apt-get update && sudo apt-get install -y maven
 
-      - name: Install Snyk
+      - name: Install Snyk globally
         run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
       - name: Scan Login Service Dependencies
         working-directory: project-portal-backend/springBoot_login/demo
         run: snyk test --file=pom.xml --severity-threshold=high || true
         env:
-          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
 
       - name: Scan Project Service Dependencies
         working-directory: project-portal-backend/springBoot_project/demo
         run: snyk test --file=pom.xml --severity-threshold=high || true
         env:
-          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
 
       - name: Scan Scan Service Dependencies
         working-directory: project-portal-backend/springBoot_scan/demo
         run: snyk test --file=pom.xml --severity-threshold=high || true
         env:
-          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
 
       - name: Scan Frontend Dependencies
         working-directory: project-portal-frontend
         run: snyk test --severity-threshold=high || true
         env:
-          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
