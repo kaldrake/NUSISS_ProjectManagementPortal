@@ -63,15 +63,15 @@ jobs:
       # =============================================
 
       - name: Resolve Dependencies (Login Microservice)
-        working-directory: springBoot_login
+        working-directory: springBoot_login/demo
         run: ./mvnw dependency:resolve
 
       - name: Resolve Dependencies (Project Microservice)
-        working-directory: springBoot_project
+        working-directory: springBoot_project/demo
         run: ./mvnw dependency:resolve
 
       - name: Resolve Dependencies (Scan Microservice)
-        working-directory: springBoot_scan
+        working-directory: springBoot_scan/demo
         run: ./mvnw dependency:resolve
 
       # =============================================
