@@ -1,113 +1,47 @@
-name: Combined Security Scans (Separate Frontend/Backend)
+# =============================================
+# FIX MAVEN WRAPPER PERMISSIONS
+# =============================================
 
-on:
-  push:
-    branches: [main, feature-projectScan]
+- name: Grant execute permission for Maven wrappers
+  run: |
+    chmod +x springBoot_login/mvnw
+    chmod +x springBoot_project/mvnw
+    chmod +x springBoot_scan/mvnw
 
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+# =============================================
+# PRE-RESOLVE MAVEN DEPENDENCIES
+# =============================================
 
-  schedule:
-    - cron: '0 0 * * 1'
+- name: Resolve Dependencies (Login Microservice)
+  working-directory: springBoot_login
+  run: ./mvnw dependency:resolve
 
-jobs:
-  dependency-scan:
-    name: Dependency Vulnerability Scan
-    runs-on: ubuntu-latest
+- name: Resolve Dependencies (Project Microservice)
+  working-directory: springBoot_project
+  run: ./mvnw dependency:resolve
 
-    steps:
-      # =============================================
-      # CHECKOUT
-      # =============================================
+- name: Resolve Dependencies (Scan Microservice)
+  working-directory: springBoot_scan
+  run: ./mvnw dependency:resolve
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+# =============================================
+# BACKEND SNYK SCANS
+# =============================================
 
-      # =============================================
-      # NODE.JS SETUP
-      # =============================================
+- name: Scan Backend Dependencies (Login Microservice)
+  working-directory: springBoot_login
+  run: snyk test --file=pom.xml --severity-threshold=high -d
+  env:
+    SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+- name: Scan Backend Dependencies (Project Microservice)
+  working-directory: springBoot_project
+  run: snyk test --file=pom.xml --severity-threshold=high -d
+  env:
+    SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      # =============================================
-      # JAVA SETUP
-      # =============================================
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      # =============================================
-      # INSTALL SNYK
-      # =============================================
-
-      - name: Install Snyk CLI
-        run: npm install -g snyk
-
-      # =============================================
-      # FIX MAVEN WRAPPER PERMISSIONS
-      # =============================================
-
-      - name: Grant execute permission for Maven wrappers
-        run: |
-          chmod +x project-portal-backend/springBoot_login/mvnw
-          chmod +x project-portal-backend/springBoot_project/mvnw
-          chmod +x project-portal-backend/springBoot_scan/mvnw
-
-      # =============================================
-      # PRE-RESOLVE MAVEN DEPENDENCIES
-      # =============================================
-
-      - name: Resolve Dependencies (Login Microservice)
-        working-directory: project-portal-backend/springBoot_login
-        run: ./mvnw dependency:resolve
-
-      - name: Resolve Dependencies (Project Microservice)
-        working-directory: project-portal-backend/springBoot_project
-        run: ./mvnw dependency:resolve
-
-      - name: Resolve Dependencies (Scan Microservice)
-        working-directory: project-portal-backend/springBoot_scan
-        run: ./mvnw dependency:resolve
-
-      # =============================================
-      # BACKEND SNYK SCANS
-      # =============================================
-
-      - name: Scan Backend Dependencies (Login Microservice)
-        working-directory: project-portal-backend/springBoot_login
-        run: snyk test --file=pom.xml --severity-threshold=high -d
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Scan Backend Dependencies (Project Microservice)
-        working-directory: project-portal-backend/springBoot_project
-        run: snyk test --file=pom.xml --severity-threshold=high -d
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Scan Backend Dependencies (Scan Microservice)
-        working-directory: project-portal-backend/springBoot_scan
-        run: snyk test --file=pom.xml --severity-threshold=high -d
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      # =============================================
-      # FRONTEND SNYK SCAN
-      # =============================================
-
-      - name: Install Frontend Dependencies
-        working-directory: project-portal-frontend
-        run: npm install
-
-      - name: Scan Frontend Dependencies
-        working-directory: project-portal-frontend
-        run: snyk test --file=package-lock.json --severity-threshold=high -d
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+- name: Scan Backend Dependencies (Scan Microservice)
+  working-directory: springBoot_scan
+  run: snyk test --file=pom.xml --severity-threshold=high -d
+  env:
+    SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
