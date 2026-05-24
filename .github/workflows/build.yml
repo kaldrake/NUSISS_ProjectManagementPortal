@@ -39,19 +39,19 @@ jobs:
       # =============================================
 
       - name: Scan Backend Dependencies (Login Microservice)
-        working-directory: project-portal-backend/springBoot_login
+        working-directory: project-portal-backend/springBoot_login/demo
         run: snyk test --file=pom.xml --severity-threshold=high
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Scan Backend Dependencies (Project Microservice)
-        working-directory: project-portal-backend/springBoot_project
+        working-directory: project-portal-backend/springBoot_project/demo
         run: snyk test --file=pom.xml --severity-threshold=high
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Scan Backend Dependencies (Scan Microservice)
-        working-directory: project-portal-backend/springBoot_scan
+        working-directory: project-portal-backend/springBoot_scan/demo
         run: snyk test --file=pom.xml --severity-threshold=high
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
