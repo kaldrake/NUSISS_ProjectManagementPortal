@@ -67,7 +67,7 @@ jobs:
         working-directory: ${{ matrix.service.path }}
         run: |
           # Increase Node.js memory limit
-          export NODE_OPTIONS="--max-old-space-size=4096"
+          export NODE_OPTIONS="--max-old-space-size=8192"
           
           # Resolve Maven dependencies
           mvn dependency:resolve
@@ -122,8 +122,8 @@ jobs:
       - name: Snyk test (Frontend)
         working-directory: project-portal-frontend
         run: |
-          export NODE_OPTIONS="--max-old-space-size=4096"
-          snyk test --severity-threshold=high --fail-on=upgradable
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          snyk test --severity-threshold=high --fail-on=upgradable -d
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
