@@ -79,7 +79,7 @@ jobs:
           mvn dependency:resolve
           
           # Run Snyk test
-          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --org=kaldrake -d
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
