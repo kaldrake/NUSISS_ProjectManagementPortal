@@ -62,6 +62,11 @@ jobs:
 
       - name: Authenticate Snyk
         run: snyk auth ${{ env.SNYK_TOKEN }}
+      
+      - name: Check Snyk Auth (debug)
+        run: snyk whoami
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
       - name: Resolve & Test Dependencies (${{ matrix.service.name }})
         working-directory: ${{ matrix.service.path }}
@@ -73,7 +78,7 @@ jobs:
           mvn dependency:resolve
           
           # Run Snyk test
-          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --org=bc7bbd68-bbc0-476e-a520-2294cafbbbc9 -d
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --org=kaldrake -d
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
