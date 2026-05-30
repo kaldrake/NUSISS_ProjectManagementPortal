@@ -75,6 +75,7 @@ jobs:
           # Run Snyk test
           snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable -d
         env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
       - name: Snyk monitor (${{ matrix.service.name }})
