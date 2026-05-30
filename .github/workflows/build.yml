@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
-  schedule:
-    - cron: '0 0 * * 1'
+  # schedule:
+  #   - cron: '0 0 * * 1'
 
 env:
   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -73,7 +73,7 @@ jobs:
           mvn dependency:resolve
           
           # Run Snyk test
-          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable -d
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
