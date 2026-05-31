@@ -6,16 +6,11 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
-  # schedule:
-  #   - cron: '0 0 * * 1'
 
 env:
   SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
 jobs:
-  # =============================================
-  # BACKEND SNYK SCANS (3 Microservices)
-  # =============================================
   backend-snyk:
     name: Backend Snyk Scans
     runs-on: ubuntu-latest
@@ -24,10 +19,6 @@ jobs:
         service:
           - name: login
             path: project-portal-backend/springBoot_login/demo
-          # - name: project
-          #   path: project-portal-backend/springBoot_project/demo
-          # - name: scan
-          #   path: project-portal-backend/springBoot_scan/demo
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -48,38 +39,40 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles(format('{0}/pom.xml', matrix.service.path)) }}
           restore-keys: ${{ runner.os }}-m2
 
-      - name: Debug environment (${{ matrix.service.name }})
+      - name: Make Maven wrapper executable
         working-directory: ${{ matrix.service.path }}
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "Files in directory:"
-          ls -la
-          mvn --version
+        run: chmod +x mvnw
 
-      - name: Run Snyk test via Maven plugin (${{ matrix.service.name }})
+      - name: Install Snyk globally
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ env.SNYK_TOKEN }}
+      
+      - name: Check Snyk Auth
+        run: snyk whoami
+
+      - name: Run Snyk test (${{ matrix.service.name }})
         timeout-minutes: 20
         working-directory: ${{ matrix.service.path }}
         run: |
-          # Run Snyk directly via Maven plugin (no wrapper issues)
-          mvn com.snyk:snyk-maven-plugin:test \
-            -Dsnyk.severity-threshold=high \
-            -Dsnyk.fail-on=upgradable \
-            -DskipTests
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          # Use system Maven instead of wrapper to avoid permission issues
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
         env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+          # Force Snyk to use system Maven
+          PATH: /usr/share/maven/bin:${{ env.PATH }}
 
       - name: Snyk monitor (${{ matrix.service.name }})
         if: github.event_name == 'push'
         working-directory: ${{ matrix.service.path }}
-        run: |
-          mvn com.snyk:snyk-maven-plugin:monitor \
-            -Dsnyk.project-name=${{ github.repository }}-${{ matrix.service.name }}
+        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+          PATH: /usr/share/maven/bin:${{ env.PATH }}
 
-  # =============================================
-  # FRONTEND SNYK SCAN
-  # =============================================
   frontend-snyk:
     name: Frontend Snyk Scan
     runs-on: ubuntu-latest
@@ -93,14 +86,6 @@ jobs:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: project-portal-frontend/package-lock.json
-
-      - name: Debug frontend environment
-        working-directory: project-portal-frontend
-        run: |
-          echo "Current directory: $(pwd)"
-          ls -la
-          node --version
-          npm --version
 
       - name: Install dependencies
         working-directory: project-portal-frontend
@@ -127,9 +112,6 @@ jobs:
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
-  # =============================================
-  # CONSOLIDATED DEPENDENCY SCAN (Runs after all scans, doesn't fail the workflow)
-  # =============================================
   dependency-scan:
     name: Consolidated Dependency Scan
     runs-on: ubuntu-latest
@@ -162,8 +144,8 @@ jobs:
       - name: Scan Login Service Dependencies
         working-directory: project-portal-backend/springBoot_login/demo
         run: |
-          mvn com.snyk:snyk-maven-plugin:test \
-            -Dsnyk.severity-threshold=high || true
+          export PATH=/usr/share/maven/bin:$PATH
+          snyk test --file=pom.xml --severity-threshold=high --debug || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
@@ -171,8 +153,8 @@ jobs:
       - name: Scan Project Service Dependencies
         working-directory: project-portal-backend/springBoot_project/demo
         run: |
-          mvn com.snyk:snyk-maven-plugin:test \
-            -Dsnyk.severity-threshold=high || true
+          export PATH=/usr/share/maven/bin:$PATH
+          snyk test --file=pom.xml --severity-threshold=high --debug || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
@@ -180,8 +162,8 @@ jobs:
       - name: Scan Scan Service Dependencies
         working-directory: project-portal-backend/springBoot_scan/demo
         run: |
-          mvn com.snyk:snyk-maven-plugin:test \
-            -Dsnyk.severity-threshold=high || true
+          export PATH=/usr/share/maven/bin:$PATH
+          snyk test --file=pom.xml --severity-threshold=high --debug || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
