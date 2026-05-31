@@ -24,10 +24,10 @@ jobs:
         service:
           - name: login
             path: project-portal-backend/springBoot_login/demo
-          - name: project
-            path: project-portal-backend/springBoot_project/demo
-          - name: scan
-            path: project-portal-backend/springBoot_scan/demo
+          # - name: project
+          #   path: project-portal-backend/springBoot_project/demo
+          # - name: scan
+          #   path: project-portal-backend/springBoot_scan/demo
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
