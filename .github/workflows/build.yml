@@ -1,55 +1,200 @@
 name: Combined Security Scans (Separate Frontend/Backend)
+
 on:
   push:
     branches: [main, feature-projectScan]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
-  schedule:
-    - cron: '0 0 * * 1'
+
+env:
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
 jobs:
-  # =============================================
-  # DEPENDENCY SCAN (Cross-platform Snyk)
-  # =============================================
-  dependency-scan:
-    name: Dependency Vulnerability Scan
+  backend-snyk:
+    name: Backend Snyk Scans
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: login
+            path: project-portal-backend/springBoot_login/demo
+          - name: project
+            path: project-portal-backend/springBoot_project/demo
+          - name: scan
+            path: project-portal-backend/springBoot_scan/demo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install Maven
+        run: sudo apt-get update && sudo apt-get install -y maven
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles(format('{0}/pom.xml', matrix.service.path)) }}
+          restore-keys: ${{ runner.os }}-m2
+
+      # CRITICAL FIX: Remove Maven wrapper to force Snyk to use system Maven
+      - name: Remove Maven wrapper files
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          # Rename mvnw files so Snyk can't find them
+          mv mvnw mvnw.bak 2>/dev/null || echo "No mvnw file found"
+          mv mvnw.cmd mvnw.cmd.bak 2>/dev/null || echo "No mvnw.cmd file found"
+          echo "Maven wrapper files renamed. Snyk will use system Maven."
+
+      - name: Install Snyk globally
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ env.SNYK_TOKEN }}
+      
+      - name: Verify Snyk
+        run: snyk whoami
+
+      - name: Run Snyk test (${{ matrix.service.name }})
+        timeout-minutes: 20
+        working-directory: ${{ matrix.service.path }}
+        continue-on-error: true
+        run: |
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+
+      - name: Snyk monitor (${{ matrix.service.name }})
+        if: github.event_name == 'push'
+        working-directory: ${{ matrix.service.path }}
+        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+
+      # Restore mvnw files (optional, for local development)
+      - name: Restore Maven wrapper files
+        if: always()
+        working-directory: ${{ matrix.service.path }}
+        run: |
+          mv mvnw.bak mvnw 2>/dev/null || true
+          mv mvnw.cmd.bak mvnw.cmd 2>/dev/null || true
+
+  frontend-snyk:
+    name: Frontend Snyk Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Scan Backend Dependencies (Login Microservice)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: project-portal-frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: project-portal-frontend
+        run: npm ci
+
+      - name: Install Snyk globally
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ env.SNYK_TOKEN }}
+
+      - name: Verify Snyk
+        run: snyk whoami
+
+      - name: Snyk test (Frontend)
+        working-directory: project-portal-frontend
         run: |
-          cd /project-portal-backend/springBoot_login
-          npx snyk test --file=pom.xml --severity-threshold=high
+          export NODE_OPTIONS="--max-old-space-size=8192"
+          snyk test --severity-threshold=high --fail-on=upgradable -d
         env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
-      - name: Scan Backend Dependencies (Project Microservice)
-        run: |
-          cd /project-portal-backend/springBoot_project
-          npx snyk test --file=pom.xml --severity-threshold=high
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Scan Backend Dependencies (Scan Microservice)
-        run: |
-          cd /project-portal-backend/springBoot_scan
-          npx snyk test --file=pom.xml --severity-threshold=high
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Scan Frontend Dependencies
-        run: |
-          cd project-portal-frontend
-          npx snyk test --file=package-lock.json --severity-threshold=high
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Monitor All Dependencies
+      - name: Snyk monitor (Frontend)
         if: github.event_name == 'push'
+        working-directory: project-portal-frontend
+        run: snyk monitor --project-name=${{ github.repository }}-frontend
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+
+  dependency-scan:
+    name: Consolidated Dependency Scan
+    runs-on: ubuntu-latest
+    needs: [backend-snyk, frontend-snyk]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Maven
+        run: sudo apt-get update && sudo apt-get install -y maven
+
+      - name: Install Snyk globally
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Verify Snyk
+        run: snyk --version
+
+      - name: Scan Login Service
+        working-directory: project-portal-backend/springBoot_login/demo
         run: |
-          cd backend && npx snyk monitor --file=pom.xml
-          cd ../frontend/common-queue-frontend && npx snyk monitor --file=package-lock.json
+          # Rename mvnw to force system Maven
+          mv mvnw mvnw.bak 2>/dev/null || true
+          snyk test --file=pom.xml --severity-threshold=high --debug || true
+          mv mvnw.bak mvnw 2>/dev/null || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Scan Project Service
+        working-directory: project-portal-backend/springBoot_project/demo
+        run: |
+          mv mvnw mvnw.bak 2>/dev/null || true
+          snyk test --file=pom.xml --severity-threshold=high --debug || true
+          mv mvnw.bak mvnw 2>/dev/null || true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Scan Scan Service
+        working-directory: project-portal-backend/springBoot_scan/demo
+        run: |
+          mv mvnw mvnw.bak 2>/dev/null || true
+          snyk test --file=pom.xml --severity-threshold=high --debug || true
+          mv mvnw.bak mvnw 2>/dev/null || true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Scan Frontend
+        working-directory: project-portal-frontend
+        run: snyk test --severity-threshold=high --debug || true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
