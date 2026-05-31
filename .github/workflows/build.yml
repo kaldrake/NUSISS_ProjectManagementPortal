@@ -55,40 +55,25 @@ jobs:
           echo "Files in directory:"
           ls -la
           mvn --version
-          npx snyk --version || echo "Snyk not yet installed"
 
-      - name: Install Snyk globally
-        run: npm install -g snyk
-
-      - name: Authenticate Snyk
-        run: snyk auth ${{ env.SNYK_TOKEN }}
-      
-      - name: Check Snyk Auth (debug)
-        run: snyk whoami
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      # Removed: Make mvnw executable - not needed with --scan-unmanaged flag
-      # - name: Make mvnw executable
-      #   run: chmod +x ./mvnw
-
-      - name: Resolve & Test Dependencies (${{ matrix.service.name }})
+      - name: Run Snyk test via Maven plugin (${{ matrix.service.name }})
         timeout-minutes: 20
         working-directory: ${{ matrix.service.path }}
         run: |
-          # Increase Node.js memory limit
-          export NODE_OPTIONS="--max-old-space-size=8192"
-          
-          # Run Snyk test with --scan-unmanaged to avoid Maven build issues
-          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d --scan-unmanaged
+          # Run Snyk directly via Maven plugin (no wrapper issues)
+          mvn com.snyk:snyk-maven-plugin:test \
+            -Dsnyk.severity-threshold=high \
+            -Dsnyk.fail-on=upgradable \
+            -DskipTests
         env:
-          NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
       - name: Snyk monitor (${{ matrix.service.name }})
         if: github.event_name == 'push'
         working-directory: ${{ matrix.service.path }}
-        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }} --scan-unmanaged
+        run: |
+          mvn com.snyk:snyk-maven-plugin:monitor \
+            -Dsnyk.project-name=${{ github.repository }}-${{ matrix.service.name }}
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
@@ -176,21 +161,27 @@ jobs:
 
       - name: Scan Login Service Dependencies
         working-directory: project-portal-backend/springBoot_login/demo
-        run: snyk test --file=pom.xml --severity-threshold=high --debug --scan-unmanaged || true
+        run: |
+          mvn com.snyk:snyk-maven-plugin:test \
+            -Dsnyk.severity-threshold=high || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
       - name: Scan Project Service Dependencies
         working-directory: project-portal-backend/springBoot_project/demo
-        run: snyk test --file=pom.xml --severity-threshold=high --debug --scan-unmanaged || true
+        run: |
+          mvn com.snyk:snyk-maven-plugin:test \
+            -Dsnyk.severity-threshold=high || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
       - name: Scan Scan Service Dependencies
         working-directory: project-portal-backend/springBoot_scan/demo
-        run: snyk test --file=pom.xml --severity-threshold=high --debug --scan-unmanaged || true
+        run: |
+          mvn com.snyk:snyk-maven-plugin:test \
+            -Dsnyk.severity-threshold=high || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
