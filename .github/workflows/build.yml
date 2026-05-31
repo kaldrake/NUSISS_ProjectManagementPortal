@@ -68,6 +68,9 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
+      - name: Make mvnw executable
+        run: chmod +x ./mvnw
+
       - name: Resolve & Test Dependencies (${{ matrix.service.name }})
         timeout-minutes: 20
         working-directory: ${{ matrix.service.path }}
