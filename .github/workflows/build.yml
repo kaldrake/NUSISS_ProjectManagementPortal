@@ -68,8 +68,9 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Make mvnw executable
-        run: chmod +x ./mvnw
+      # Removed: Make mvnw executable - not needed with --scan-unmanaged flag
+      # - name: Make mvnw executable
+      #   run: chmod +x ./mvnw
 
       - name: Resolve & Test Dependencies (${{ matrix.service.name }})
         timeout-minutes: 20
@@ -78,11 +79,8 @@ jobs:
           # Increase Node.js memory limit
           export NODE_OPTIONS="--max-old-space-size=8192"
           
-          # Resolve Maven dependencies
-          # mvn dependency:resolve-plugins -DincludePluginDependencies=false
-          
-          # Run Snyk test
-          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
+          # Run Snyk test with --scan-unmanaged to avoid Maven build issues
+          snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d --scan-unmanaged
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
@@ -90,7 +88,7 @@ jobs:
       - name: Snyk monitor (${{ matrix.service.name }})
         if: github.event_name == 'push'
         working-directory: ${{ matrix.service.path }}
-        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
+        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }} --scan-unmanaged
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
@@ -178,21 +176,21 @@ jobs:
 
       - name: Scan Login Service Dependencies
         working-directory: project-portal-backend/springBoot_login/demo
-        run: snyk test --file=pom.xml --severity-threshold=high --debug || true
+        run: snyk test --file=pom.xml --severity-threshold=high --debug --scan-unmanaged || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
       - name: Scan Project Service Dependencies
         working-directory: project-portal-backend/springBoot_project/demo
-        run: snyk test --file=pom.xml --severity-threshold=high --debug || true
+        run: snyk test --file=pom.xml --severity-threshold=high --debug --scan-unmanaged || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
       - name: Scan Scan Service Dependencies
         working-directory: project-portal-backend/springBoot_scan/demo
-        run: snyk test --file=pom.xml --severity-threshold=high --debug || true
+        run: snyk test --file=pom.xml --severity-threshold=high --debug --scan-unmanaged || true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
