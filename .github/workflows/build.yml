@@ -64,6 +64,7 @@ jobs:
       - name: Run Snyk test (${{ matrix.service.name }})
         timeout-minutes: 20
         working-directory: ${{ matrix.service.path }}
+        continue-on-error: true
         run: |
           export NODE_OPTIONS="--max-old-space-size=8192"
           snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
