@@ -76,7 +76,7 @@ jobs:
           export NODE_OPTIONS="--max-old-space-size=8192"
           
           # Resolve Maven dependencies
-          mvn dependency:resolve-plugins -DincludePluginDependencies=false
+          # mvn dependency:resolve-plugins -DincludePluginDependencies=false
           
           # Run Snyk test
           snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
