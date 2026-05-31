@@ -39,17 +39,13 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles(format('{0}/pom.xml', matrix.service.path)) }}
           restore-keys: ${{ runner.os }}-m2
 
-      - name: Make Maven wrapper executable
-        working-directory: ${{ matrix.service.path }}
-        run: chmod +x mvnw
-
       - name: Install Snyk globally
         run: npm install -g snyk
 
       - name: Authenticate Snyk
         run: snyk auth ${{ env.SNYK_TOKEN }}
       
-      - name: Check Snyk Auth
+      - name: Verify Snyk
         run: snyk whoami
 
       - name: Run Snyk test (${{ matrix.service.name }})
@@ -57,21 +53,20 @@ jobs:
         working-directory: ${{ matrix.service.path }}
         run: |
           export NODE_OPTIONS="--max-old-space-size=8192"
-          # Use system Maven instead of wrapper to avoid permission issues
+          export PATH=/usr/share/maven/bin:$PATH
           snyk test --file=pom.xml --severity-threshold=high --fail-on=upgradable --print-dep -d
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
-          # Force Snyk to use system Maven
-          PATH: /usr/share/maven/bin:${{ env.PATH }}
 
       - name: Snyk monitor (${{ matrix.service.name }})
         if: github.event_name == 'push'
         working-directory: ${{ matrix.service.path }}
-        run: snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
+        run: |
+          export PATH=/usr/share/maven/bin:$PATH
+          snyk monitor --file=pom.xml --project-name=${{ github.repository }}-${{ matrix.service.name }}
         env:
           SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
-          PATH: /usr/share/maven/bin:${{ env.PATH }}
 
   frontend-snyk:
     name: Frontend Snyk Scan
@@ -96,6 +91,9 @@ jobs:
 
       - name: Authenticate Snyk
         run: snyk auth ${{ env.SNYK_TOKEN }}
+
+      - name: Verify Snyk
+        run: snyk whoami
 
       - name: Snyk test (Frontend)
         working-directory: project-portal-frontend
@@ -141,7 +139,10 @@ jobs:
       - name: Authenticate Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
-      - name: Scan Login Service Dependencies
+      - name: Verify Snyk
+        run: snyk --version
+
+      - name: Scan Login Service
         working-directory: project-portal-backend/springBoot_login/demo
         run: |
           export PATH=/usr/share/maven/bin:$PATH
@@ -150,7 +151,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
-      - name: Scan Project Service Dependencies
+      - name: Scan Project Service
         working-directory: project-portal-backend/springBoot_project/demo
         run: |
           export PATH=/usr/share/maven/bin:$PATH
@@ -159,7 +160,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
-      - name: Scan Scan Service Dependencies
+      - name: Scan Scan Service
         working-directory: project-portal-backend/springBoot_scan/demo
         run: |
           export PATH=/usr/share/maven/bin:$PATH
@@ -168,7 +169,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         continue-on-error: true
 
-      - name: Scan Frontend Dependencies
+      - name: Scan Frontend
         working-directory: project-portal-frontend
         run: snyk test --severity-threshold=high --debug || true
         env:
