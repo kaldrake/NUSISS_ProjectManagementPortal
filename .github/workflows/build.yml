@@ -1,5 +1,4 @@
 name: Combined Security Scans (Separate Frontend/Backend)
-
 on:
   push:
     branches: [main, feature-projectScan]
