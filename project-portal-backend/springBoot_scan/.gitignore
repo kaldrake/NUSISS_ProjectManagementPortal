@@ -1,0 +1,208 @@
+# Compiled files
+*.class
+*.jar
+*.war
+*.nar
+*.log
+*.tmp
+*.pid
+*.gz
+*.zip
+
+# Package files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+gradle-app.setting
+**/gradlew
+**/gradlew.bat
+**/gradle/wrapper/gradle-wrapper.properties
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+.idea_modules/
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/contentModel.xml
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/dbnavigator.xml
+.idea/**/gradle.xml
+.idea/**/libraries
+.idea/modules.xml
+.idea/*.iml
+*.iws
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+.metadata/
+.apt_generated/
+.apt_generated_tests/
+.springBeans
+.sts4-cache/
+.factorypath
+.remote-perspective-xml
+*.launch
+.cheatsheet.xml
+.loadpath
+.recommenders/
+.externalToolBuilders/
+
+# NetBeans
+/nbproject/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!build.gradle
+nbactions.xml
+nb-configuration.xml
+
+# VS Code
+.vscode/
+.code
+.history/
+*.code-workspace
+
+# STS (Spring Tool Suite)
+.apt_generated/
+.factorypath
+.springBeans
+.sts4-cache/
+
+# Spring Boot specific
+application-local.properties
+application-dev.properties
+application-staging.properties
+application-prod.properties
+*.log
+springboot.pid
+dump.rdb
+
+# Actuator & Metrics
+metrics.db
+health.db
+info.db
+
+# Database
+*.db
+*.h2.db
+*.lock
+*.script
+*.log.db
+*.trace.db
+hsqldb/
+derby.log
+
+# Logs
+logs/
+*.log
+log/
+**/logs/
+**/log/
+**/target/logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.bak
+*.swp
+*~
+\#*#
+.\#*
+
+# Secret files (IMPORTANT!)
+*.p12
+*.pfx
+*.jks
+*.key
+*.pem
+*.crt
+*.secret
+application-secret.properties
+secrets.yml
+.env
+*.env
+.env.local
+.env.*.local
+
+# Test output
+test-output/
+coverage/
+*.test
+*.itest
+**/target/test-classes/
+**/target/surefire-reports/
+**/target/failsafe-reports/
+
+# Docker
+*.pid
+Dockerfile.tmp
+docker-compose.override.yml
+.dockerignore
+
+# Kubernetes
+*.secret.yaml
+*.secret.yml
+secrets.yaml
+secrets.yml
+
+# Lombok
+. lombok
+.lombok
+
+# Heap dumps
+*.hprof
+*.heap
+*.dump
+
+# Application specific
+*.tmp
+*.swp
+*.swo
+*~
+.classpath
+.project
+.settings/
+spring-shell.log
