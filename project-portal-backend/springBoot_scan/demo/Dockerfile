@@ -1,5 +1,5 @@
 # Scan Service Dockerfile
-FROM openjdk:17-jdk-slim AS build
+FROM eclipse-temurin:17-jdk-alpine AS build
 WORKDIR /app
 
 # Copy Maven files
@@ -10,7 +10,7 @@ COPY src ./src
 RUN ./mvnw clean package -DskipTests
 
 # Runtime stage
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk-alpine
 WORKDIR /app
 
 # Copy the built JAR
