@@ -12,9 +12,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -281,27 +285,37 @@ public class ScanServiceClient {
     }
     
     /**
-     * Get JWT token from security context
+     * Extract JWT token from the current incoming request's Authorization header
      */
     private String getJwtToken() {
-        // Implement based on your security setup
-        // Option 1: From SecurityContextHolder
-        // Option 2: From RequestContextHolder
-        // Option 3: From injected HttpServletRequest
-        
-        // For now, return null (implement based on your auth mechanism)
+        try {
+            ServletRequestAttributes attrs =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                String authHeader = attrs.getRequest().getHeader("Authorization");
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    return authHeader.substring(7);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not extract JWT token: {}", e.getMessage());
+        }
         return null;
     }
-    
+
     /**
-     * Get current user ID from security context
+     * Get current user ID from Spring Security context (set by JwtAuthenticationFilter)
      */
     private Long getCurrentUserId() {
-        // Implement based on your security setup
-        // Option 1: From JWT token
-        // Option 2: From SecurityContextHolder
-        
-        // For now, return null (implement based on your auth mechanism)
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                // Principal is the username string set in JwtAuthenticationFilter
+                return null; // userId not available without DB lookup; X-User-Id header used instead
+            }
+        } catch (Exception e) {
+            log.warn("Could not get current user ID: {}", e.getMessage());
+        }
         return null;
     }
 }
