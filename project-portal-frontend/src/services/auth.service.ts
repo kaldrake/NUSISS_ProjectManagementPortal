@@ -64,6 +64,6 @@ export const authService = {
 
     logout() {
         this.clearToken();
-        window.location.href = '/login';
+        window.location.replace('/login');
     },
 };

@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # =============================================
+  # PostgreSQL for SonarQube
+  # =============================================
+  sonar-db:
+    image: postgres:13
+    container_name: portal-sonar-db
+    environment:
+      - POSTGRES_USER=sonar
+      - POSTGRES_PASSWORD=sonar
+      - POSTGRES_DB=sonar
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - portal-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================
+  # SonarQube Server (Port 9001) - Using LTS version compatible with scanner v6
+  # =============================================
+  sonarqube:
+    image: sonarqube:9.9.5-community
+    container_name: portal-sonarqube
+    ports:
+      - "9001:9000"
+    environment:
+      - SONAR_JDBC_URL=jdbc:postgresql://sonar-db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    depends_on:
+      sonar-db:
+        condition: service_healthy
+    networks:
+      - portal-network
+
+  # =============================================
+  # Login Service (Port 8081)
+  # =============================================
+  login-service:
+    build:
+      context: ./project-portal-backend/springBoot_login/demo
+      dockerfile: Dockerfile
+    container_name: portal-login-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_PORT=8081
+      - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST}:${DB_PORT:-3306}/${LOGIN_DB_NAME:-login_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=${LOGIN_DB_USER:-root}
+      - SPRING_DATASOURCE_PASSWORD=${LOGIN_DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+    networks:
+      - portal-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # =============================================
+  # Project Service (Port 8082)
+  # =============================================
+  project-service:
+    build:
+      context: ./project-portal-backend/springBoot_project/demo
+      dockerfile: Dockerfile
+    container_name: portal-project-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST}:${DB_PORT:-3306}/${PROJECT_DB_NAME:-project_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=${PROJECT_DB_USER:-root}
+      - SPRING_DATASOURCE_PASSWORD=${PROJECT_DB_PASSWORD}
+      - LOGIN_SERVICE_URL=${LOGIN_SERVICE_URL:-http://login-service:8081}
+      - SCAN_SERVICE_URL=${SCAN_SERVICE_URL:-http://scan-service:8083}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+    depends_on:
+      - login-service
+      - scan-service
+    networks:
+      - portal-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # =============================================
+  # Scan Service (Port 8083)
+  # =============================================
+  scan-service:
+    build:
+      context: ./project-portal-backend/springBoot_scan/demo
+      dockerfile: Dockerfile
+    container_name: portal-scan-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SERVER_PORT=8083
+      - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST}:${DB_PORT:-3306}/${SCAN_DB_NAME:-scan_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=${SCAN_DB_USER:-root}
+      - SPRING_DATASOURCE_PASSWORD=${SCAN_DB_PASSWORD}
+      - SONAR_HOST_URL=http://sonarqube:9000
+      - SONAR_TOKEN=${SONAR_TOKEN:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+    depends_on:
+      - sonarqube
+    networks:
+      - portal-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # =============================================
+  # Frontend (Port 3000)
+  # =============================================
+  frontend:
+    build:
+      context: ./project-portal-frontend
+      dockerfile: Dockerfile
+    container_name: portal-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - login-service
+      - project-service
+      - scan-service
+    networks:
+      - portal-network
+
+networks:
+  portal-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

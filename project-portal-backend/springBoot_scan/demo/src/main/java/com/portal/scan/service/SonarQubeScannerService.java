@@ -79,28 +79,23 @@ public class SonarQubeScannerService {
     }
     
     private void runSonarScanner(String repoPath, String projectKey) throws Exception {
-        String hostIp = getHostIp(); // Method to get your IP
-        String sonarHost = "http://" + hostIp + ":9001";
-        
-        log.info("=== Starting SonarScanner ===");
+        log.info("=== Starting SonarScanner (Local Mode) ===");
         log.info("Project key: {}", projectKey);
         log.info("Repo path: {}", repoPath);
-        log.info("SonarQube host: {}", sonarHost);
-        
         
         ProcessBuilder pb = new ProcessBuilder(
-            "docker", "run", "--rm",
-            "-v", repoPath + ":/usr/src",
-            "sonarsource/sonar-scanner-cli",
+            "sonar-scanner",
             "-Dsonar.projectKey=" + projectKey,
             "-Dsonar.sources=.",
-            "-Dsonar.java.binaries=.",  
-            "-Dsonar.host.url=" + sonarHost,
+            "-Dsonar.java.binaries=.",
+            "-Dsonar.host.url=" + sonarHostUrl,
             "-Dsonar.login=" + sonarToken,
-            "-X"  // Add debug mode
+            "-X"
         );
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
+        
+        log.info("Running command: {}", String.join(" ", pb.command()));
         
         Process process = pb.start();
         
@@ -120,15 +115,8 @@ public class SonarQubeScannerService {
             log.error("Full output:\n{}", output.toString());
             throw new RuntimeException("SonarScanner failed with exit code: " + exitCode + "\nOutput: " + output);
         }
-    }
-
-    private String getHostIp() {
-        try {
-            java.net.InetAddress localHost = java.net.InetAddress.getLocalHost();
-            return localHost.getHostAddress();
-        } catch (Exception e) {
-            return "192.168.1.100"; // fallback
-        }
+        
+        log.info("SonarScanner completed successfully");
     }
     
     private void waitForAnalysis(String projectKey) throws Exception {
@@ -139,21 +127,25 @@ public class SonarQubeScannerService {
         for (int i = 0; i < 30; i++) {
             Thread.sleep(2000);
             
-            ResponseEntity<String> response = restTemplate.exchange(
-                url, HttpMethod.GET, new HttpEntity<>(headers), String.class
-            );
-            
-            JsonNode root = objectMapper.readTree(response.getBody());
-            JsonNode tasks = root.path("tasks");
-            
-            if (tasks.isArray() && tasks.size() > 0) {
-                String status = tasks.get(0).path("status").asText();
-                if ("SUCCESS".equals(status)) {
-                    log.info("Analysis completed for: {}", projectKey);
-                    return;
-                } else if ("FAILED".equals(status)) {
-                    throw new RuntimeException("Analysis failed for: " + projectKey);
+            try {
+                ResponseEntity<String> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class
+                );
+                
+                JsonNode root = objectMapper.readTree(response.getBody());
+                JsonNode tasks = root.path("tasks");
+                
+                if (tasks.isArray() && tasks.size() > 0) {
+                    String status = tasks.get(0).path("status").asText();
+                    if ("SUCCESS".equals(status)) {
+                        log.info("Analysis completed for: {}", projectKey);
+                        return;
+                    } else if ("FAILED".equals(status)) {
+                        throw new RuntimeException("Analysis failed for: " + projectKey);
+                    }
                 }
+            } catch (Exception e) {
+                log.warn("Waiting for analysis... attempt {}, error: {}", i + 1, e.getMessage());
             }
             
             log.debug("Waiting for analysis... attempt {}", i + 1);
@@ -171,40 +163,45 @@ public class SonarQubeScannerService {
         HttpHeaders headers = new HttpHeaders();
         headers.setBasicAuth(sonarToken, "");
         
-        ResponseEntity<String> response = restTemplate.exchange(
-            url, HttpMethod.GET, new HttpEntity<>(headers), String.class
-        );
-        
-        if (!response.getStatusCode().is2xxSuccessful()) {
-            log.error("Failed to fetch issues. Status: {}", response.getStatusCode());
-            return new ArrayList<>();
-        }
-        
-        JsonNode root = objectMapper.readTree(response.getBody());
-        JsonNode issues = root.path("issues");
-        
-        List<SonarQubeIssue> result = new ArrayList<>();
-        for (JsonNode issue : issues) {
-            SonarQubeIssue sqIssue = new SonarQubeIssue();
-            sqIssue.setRuleId(issue.path("rule").asText());
-            sqIssue.setType(issue.path("type").asText());
-            sqIssue.setSeverity(issue.path("severity").asText());
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                url, HttpMethod.GET, new HttpEntity<>(headers), String.class
+            );
             
-            // Extract file path from component (format: projectKey:file/path)
-            String component = issue.path("component").asText();
-            if (component.contains(":")) {
-                sqIssue.setFilePath(component.substring(component.indexOf(":") + 1));
-            } else {
-                sqIssue.setFilePath(component);
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("Failed to fetch issues. Status: {}", response.getStatusCode());
+                return new ArrayList<>();
             }
             
-            sqIssue.setLineNumber(issue.path("line").asInt());
-            sqIssue.setMessage(issue.path("message").asText());
-            result.add(sqIssue);
+            JsonNode root = objectMapper.readTree(response.getBody());
+            JsonNode issues = root.path("issues");
+            
+            List<SonarQubeIssue> result = new ArrayList<>();
+            for (JsonNode issue : issues) {
+                SonarQubeIssue sqIssue = new SonarQubeIssue();
+                sqIssue.setRuleId(issue.path("rule").asText());
+                sqIssue.setType(issue.path("type").asText());
+                sqIssue.setSeverity(issue.path("severity").asText());
+                
+                // Extract file path from component (format: projectKey:file/path)
+                String component = issue.path("component").asText();
+                if (component.contains(":")) {
+                    sqIssue.setFilePath(component.substring(component.indexOf(":") + 1));
+                } else {
+                    sqIssue.setFilePath(component);
+                }
+                
+                sqIssue.setLineNumber(issue.path("line").asInt());
+                sqIssue.setMessage(issue.path("message").asText());
+                result.add(sqIssue);
+            }
+            
+            log.info("Fetched {} issues for project: {}", result.size(), projectKey);
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to fetch issues: {}", e.getMessage());
+            return new ArrayList<>();
         }
-        
-        log.info("Fetched {} issues for project: {}", result.size(), projectKey);
-        return result;
     }
     
     private void cleanup(String repoPath) {

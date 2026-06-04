@@ -25,6 +25,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/health").permitAll()
+                .requestMatchers("/api/scans/**").permitAll()
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session

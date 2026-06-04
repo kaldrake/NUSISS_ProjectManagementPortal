@@ -28,294 +28,278 @@ import java.util.Map;
 
 @Component
 public class ScanServiceClient {
-    
-    private static final Logger log = LoggerFactory.getLogger(ScanServiceClient.class);
-    
-    @Value("${scan.service.url:http://localhost:8083}")
-    private String scanServiceUrl;
-    
-    @Autowired
-    private RestTemplate restTemplate;
-    
-    /**
-     * Get all vulnerabilities for a project (across all scans)
-     * GET /api/scans/projects/{projectId}/vulnerabilities
-     */
-    public List<VulnerabilityDTO> getVulnerabilitiesByProjectId(Long projectId) {
-        String url = scanServiceUrl + "/api/scans/projects/" + projectId + "/vulnerabilities";
-        
-        try {
-            HttpEntity<?> entity = createAuthEntity();
-            
-            ResponseEntity<VulnerabilityDTO[]> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                entity,
-                VulnerabilityDTO[].class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                log.info("Fetched {} vulnerabilities for project {}", response.getBody().length, projectId);
-                return Arrays.asList(response.getBody());
-            }
-            
-            return Collections.emptyList();
-            
-        } catch (RestClientException e) {
-            log.error("Failed to fetch vulnerabilities for project {}: {}", projectId, e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-    
-    /**
-     * Get vulnerabilities for a specific scan
-     * GET /api/scans/{scanId}/vulnerabilities
-     */
-    public List<VulnerabilityDTO> getVulnerabilitiesByScanId(Long scanId) {
-        String url = scanServiceUrl + "/api/scans/" + scanId + "/vulnerabilities";
-        
-        try {
-            HttpEntity<?> entity = createAuthEntity();
-            
-            ResponseEntity<VulnerabilityDTO[]> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                entity,
-                VulnerabilityDTO[].class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                log.info("Fetched {} vulnerabilities for scan {}", response.getBody().length, scanId);
-                return Arrays.asList(response.getBody());
-            }
-            
-            return Collections.emptyList();
-            
-        } catch (RestClientException e) {
-            log.error("Failed to fetch vulnerabilities for scan {}: {}", scanId, e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-    
-    /**
-     * Get a single vulnerability by ID with its AI suggestion
-     * GET /api/scans/vulnerabilities/{vulnerabilityId}
-     */
-    public VulnerabilityDTO getVulnerabilityById(Long vulnerabilityId) {
-        String url = scanServiceUrl + "/api/scans/vulnerabilities/" + vulnerabilityId;
-        
-        try {
-            HttpEntity<?> entity = createAuthEntity();
-            
-            ResponseEntity<VulnerabilityDTO> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                entity,
-                VulnerabilityDTO.class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                return response.getBody();
-            }
-            
-            return null;
-            
-        } catch (RestClientException e) {
-            log.error("Failed to fetch vulnerability {}: {}", vulnerabilityId, e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Get dashboard summary for a project
-     * GET /api/scans/dashboard/projects/{projectId}/summary
-     */
-    public DashboardSummaryDTO getDashboardSummary(Long projectId) {
-        String url = scanServiceUrl + "/api/scans/dashboard/projects/" + projectId + "/summary";
-        
-        try {
-            HttpEntity<?> entity = createAuthEntity();
-            
-            ResponseEntity<DashboardSummaryDTO> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                entity,
-                DashboardSummaryDTO.class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                return response.getBody();
-            }
-            
-            return null;
-            
-        } catch (RestClientException e) {
-            log.error("Failed to fetch dashboard summary for project {}: {}", projectId, e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Get scan history for a repository
-     * GET /api/scans/repositories/{repoId}/history
-     */
-    public List<ScanHistoryDTO> getScanHistory(Long repositoryId) {
-        String url = scanServiceUrl + "/api/scans/repositories/" + repositoryId + "/history";
-        
-        try {
-            HttpEntity<?> entity = createAuthEntity();
-            
-            ResponseEntity<ScanHistoryDTO[]> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                entity,
-                ScanHistoryDTO[].class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return Arrays.asList(response.getBody());
-            }
-            
-            return Collections.emptyList();
-            
-        } catch (RestClientException e) {
-            log.error("Failed to fetch scan history for repository {}: {}", repositoryId, e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-    
-    /**
-     * Trigger a new scan
-     * POST /api/scans/analyze
-     */
-    public ScanResponseDTO triggerScan(Long projectId, Long repositoryId, String repositoryUrl, String branch) {
-        String url = scanServiceUrl + "/api/scans/analyze";
-        
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            // Add auth headers
-            String token = getJwtToken();
-            if (token != null) {
-                headers.setBearerAuth(token);
-            }
-            
-            Long userId = getCurrentUserId();
-            if (userId != null) {
-                headers.set("X-User-Id", String.valueOf(userId));
-            }
-            
-            // Build request body
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("projectId", projectId);
-            requestBody.put("repositoryId", repositoryId);
-            requestBody.put("repositoryUrl", repositoryUrl);
-            requestBody.put("branch", branch != null ? branch : "main");
-            
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-            
-            ResponseEntity<ScanResponseDTO> response = restTemplate.exchange(
-                url,
-                HttpMethod.POST,
-                entity,
-                ScanResponseDTO.class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                log.info("Triggered scan for project {} repository {}", projectId, repositoryId);
-                return response.getBody();
-            }
-            
-            return null;
-            
-        } catch (RestClientException e) {
-            log.error("Failed to trigger scan for project {}: {}", projectId, e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Get scan status
-     * GET /api/scans/{scanId}/status
-     */
-    public ScanStatusDTO getScanStatus(Long scanId) {
-        String url = scanServiceUrl + "/api/scans/" + scanId + "/status";
-        
-        try {
-            HttpEntity<?> entity = createAuthEntity();
-            
-            ResponseEntity<ScanStatusDTO> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                entity,
-                ScanStatusDTO.class
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful()) {
-                return response.getBody();
-            }
-            
-            return null;
-            
-        } catch (RestClientException e) {
-            log.error("Failed to fetch scan status for scan {}: {}", scanId, e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Create authenticated HTTP entity with JWT token and User ID
-     */
-    private HttpEntity<?> createAuthEntity() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        
-        String token = getJwtToken();
-        if (token != null) {
-            headers.setBearerAuth(token);
-        }
-        
-        Long userId = getCurrentUserId();
-        if (userId != null) {
-            headers.set("X-User-Id", String.valueOf(userId));
-        }
-        
-        return new HttpEntity<>(headers);
-    }
-    
-    /**
-     * Extract JWT token from the current incoming request's Authorization header
-     */
-    private String getJwtToken() {
-        try {
-            ServletRequestAttributes attrs =
-                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-            if (attrs != null) {
-                String authHeader = attrs.getRequest().getHeader("Authorization");
-                if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                    return authHeader.substring(7);
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Could not extract JWT token: {}", e.getMessage());
-        }
-        return null;
-    }
 
-    /**
-     * Get current user ID from Spring Security context (set by JwtAuthenticationFilter)
-     */
-    private Long getCurrentUserId() {
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated()) {
-                // Principal is the username string set in JwtAuthenticationFilter
-                return null; // userId not available without DB lookup; X-User-Id header used instead
-            }
-        } catch (Exception e) {
-            log.warn("Could not get current user ID: {}", e.getMessage());
-        }
-        return null;
-    }
+	private static final Logger log = LoggerFactory.getLogger(ScanServiceClient.class);
+
+	@Value("${scan.service.url:http://localhost:8083}")
+	private String scanServiceUrl;
+
+	@Autowired
+	private RestTemplate restTemplate;
+
+	/**
+	 * Get all vulnerabilities for a project (across all scans) GET
+	 * /api/scans/projects/{projectId}/vulnerabilities
+	 */
+	public List<VulnerabilityDTO> getVulnerabilitiesByProjectId(Long projectId) {
+		String url = scanServiceUrl + "/api/scans/projects/" + projectId + "/vulnerabilities";
+
+		try {
+			HttpEntity<?> entity = createAuthEntity();
+
+			ResponseEntity<VulnerabilityDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+					VulnerabilityDTO[].class);
+
+			if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+				log.info("Fetched {} vulnerabilities for project {}", response.getBody().length, projectId);
+				return Arrays.asList(response.getBody());
+			}
+
+			return Collections.emptyList();
+
+		} catch (RestClientException e) {
+			log.error("Failed to fetch vulnerabilities for project {}: {}", projectId, e.getMessage());
+			return Collections.emptyList();
+		}
+	}
+
+	/**
+	 * Get vulnerabilities for a specific scan GET
+	 * /api/scans/{scanId}/vulnerabilities
+	 */
+	public List<VulnerabilityDTO> getVulnerabilitiesByScanId(Long scanId) {
+		String url = scanServiceUrl + "/api/scans/" + scanId + "/vulnerabilities";
+
+		try {
+			HttpEntity<?> entity = createAuthEntity();
+
+			ResponseEntity<VulnerabilityDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+					VulnerabilityDTO[].class);
+
+			if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+				log.info("Fetched {} vulnerabilities for scan {}", response.getBody().length, scanId);
+				return Arrays.asList(response.getBody());
+			}
+
+			return Collections.emptyList();
+
+		} catch (RestClientException e) {
+			log.error("Failed to fetch vulnerabilities for scan {}: {}", scanId, e.getMessage());
+			return Collections.emptyList();
+		}
+	}
+
+	/**
+	 * Get a single vulnerability by ID with its AI suggestion GET
+	 * /api/scans/vulnerabilities/{vulnerabilityId}
+	 */
+	public VulnerabilityDTO getVulnerabilityById(Long vulnerabilityId) {
+		String url = scanServiceUrl + "/api/scans/vulnerabilities/" + vulnerabilityId;
+
+		try {
+			HttpEntity<?> entity = createAuthEntity();
+
+			ResponseEntity<VulnerabilityDTO> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+					VulnerabilityDTO.class);
+
+			if (response.getStatusCode().is2xxSuccessful()) {
+				return response.getBody();
+			}
+
+			return null;
+
+		} catch (RestClientException e) {
+			log.error("Failed to fetch vulnerability {}: {}", vulnerabilityId, e.getMessage());
+			return null;
+		}
+	}
+
+	/**
+	 * Get dashboard summary for a project GET
+	 * /api/scans/dashboard/projects/{projectId}/summary
+	 */
+	public DashboardSummaryDTO getDashboardSummary(Long projectId) {
+		String url = scanServiceUrl + "/api/scans/dashboard/projects/" + projectId + "/summary";
+
+		try {
+			HttpEntity<?> entity = createAuthEntity();
+
+			ResponseEntity<DashboardSummaryDTO> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+					DashboardSummaryDTO.class);
+
+			if (response.getStatusCode().is2xxSuccessful()) {
+				return response.getBody();
+			}
+
+			return null;
+
+		} catch (RestClientException e) {
+			log.error("Failed to fetch dashboard summary for project {}: {}", projectId, e.getMessage());
+			return null;
+		}
+	}
+
+	/**
+	 * Get scan history for a repository GET
+	 * /api/scans/repositories/{repoId}/history
+	 */
+	public List<ScanHistoryDTO> getScanHistory(Long repositoryId) {
+		String url = scanServiceUrl + "/api/scans/repositories/" + repositoryId + "/history";
+
+		try {
+			HttpEntity<?> entity = createAuthEntity();
+
+			ResponseEntity<ScanHistoryDTO[]> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+					ScanHistoryDTO[].class);
+
+			if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+				return Arrays.asList(response.getBody());
+			}
+
+			return Collections.emptyList();
+
+		} catch (RestClientException e) {
+			log.error("Failed to fetch scan history for repository {}: {}", repositoryId, e.getMessage());
+			return Collections.emptyList();
+		}
+	}
+
+	/**
+	 * Trigger a new scan POST /api/scans/analyze
+	 */
+	public ScanResponseDTO triggerScan(Long projectId, Long repositoryId, String repositoryUrl, String branch) {
+		String url = scanServiceUrl + "/api/scans/analyze";
+
+		try {
+			HttpHeaders headers = new HttpHeaders();
+			headers.setContentType(MediaType.APPLICATION_JSON);
+
+			// Add auth headers
+			String token = getJwtToken();
+			if (token != null) {
+				headers.setBearerAuth(token);
+				log.debug("Added JWT token to scan request");
+			} else {
+				log.warn("No JWT token available for scan request");
+			}
+
+			Long userId = getCurrentUserId();
+			if (userId != null) {
+				headers.set("X-User-Id", String.valueOf(userId));
+				log.debug("Added X-User-Id: {}", userId);
+			}
+
+			// Build request body
+			Map<String, Object> requestBody = new HashMap<>();
+			requestBody.put("projectId", projectId);
+			requestBody.put("repositoryId", repositoryId);
+			requestBody.put("repositoryUrl", repositoryUrl);
+			requestBody.put("branch", branch != null ? branch : "main");
+
+			HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+			log.info("Sending scan request to: {}", url);
+			log.debug("Request body: {}", requestBody);
+			log.debug("Request headers: {}", headers);
+
+			ResponseEntity<ScanResponseDTO> response = restTemplate.exchange(url, HttpMethod.POST, entity,
+					ScanResponseDTO.class);
+
+			if (response.getStatusCode().is2xxSuccessful()) {
+				log.info("Successfully triggered scan for project {} repository {}", projectId, repositoryId);
+				return response.getBody();
+			} else {
+				log.error("Scan trigger failed with status: {} - {}", response.getStatusCode(), response.getBody());
+				return null;
+			}
+
+		} catch (RestClientException e) {
+			log.error("Failed to trigger scan for project {}: {}", projectId, e.getMessage());
+			if (e.getMessage().contains("403")) {
+				log.error(
+						"403 error - This usually means the scan-service rejected the request due to missing or invalid JWT token");
+				log.error("Make sure scan-service is configured to accept requests with valid JWT tokens");
+			}
+			return null;
+		}
+	}
+
+	/**
+	 * Get scan status GET /api/scans/{scanId}/status
+	 */
+	public ScanStatusDTO getScanStatus(Long scanId) {
+		String url = scanServiceUrl + "/api/scans/" + scanId + "/status";
+
+		try {
+			HttpEntity<?> entity = createAuthEntity();
+
+			ResponseEntity<ScanStatusDTO> response = restTemplate.exchange(url, HttpMethod.GET, entity,
+					ScanStatusDTO.class);
+
+			if (response.getStatusCode().is2xxSuccessful()) {
+				return response.getBody();
+			}
+
+			return null;
+
+		} catch (RestClientException e) {
+			log.error("Failed to fetch scan status for scan {}: {}", scanId, e.getMessage());
+			return null;
+		}
+	}
+
+	/**
+	 * Create authenticated HTTP entity with JWT token and User ID
+	 */
+	private HttpEntity<?> createAuthEntity() {
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+
+		String token = getJwtToken();
+		if (token != null) {
+			headers.setBearerAuth(token);
+		}
+
+		Long userId = getCurrentUserId();
+		if (userId != null) {
+			headers.set("X-User-Id", String.valueOf(userId));
+		}
+
+		return new HttpEntity<>(headers);
+	}
+
+	/**
+	 * Extract JWT token from the current incoming request's Authorization header
+	 */
+	private String getJwtToken() {
+		try {
+			ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+			if (attrs != null) {
+				String authHeader = attrs.getRequest().getHeader("Authorization");
+				if (authHeader != null && authHeader.startsWith("Bearer ")) {
+					return authHeader.substring(7);
+				}
+			}
+		} catch (Exception e) {
+			log.warn("Could not extract JWT token: {}", e.getMessage());
+		}
+		return null;
+	}
+
+	/**
+	 * Get current user ID from Spring Security context (set by
+	 * JwtAuthenticationFilter)
+	 */
+	private Long getCurrentUserId() {
+		try {
+			Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+			if (auth != null && auth.isAuthenticated()) {
+				// Principal is the username string set in JwtAuthenticationFilter
+				return null; // userId not available without DB lookup; X-User-Id header used instead
+			}
+		} catch (Exception e) {
+			log.warn("Could not get current user ID: {}", e.getMessage());
+		}
+		return null;
+	}
 }
