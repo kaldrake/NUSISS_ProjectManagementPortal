@@ -1,0 +1,217 @@
+-- =====================================================
+-- PROJECT PORTAL - COMPLETE DATABASE SETUP
+-- MySQL 8.0+
+-- FIXED: No ENUM types, all VARCHAR
+-- =====================================================
+
+DROP DATABASE IF EXISTS login_db;
+DROP DATABASE IF EXISTS project_db;
+DROP DATABASE IF EXISTS scan_db;
+
+CREATE DATABASE IF NOT EXISTS login_db;
+CREATE DATABASE IF NOT EXISTS project_db;
+CREATE DATABASE IF NOT EXISTS scan_db;
+
+-- =====================================================
+-- 1. LOGIN SERVICE DATABASE
+-- =====================================================
+USE login_db;
+
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    github_id BIGINT NULL,
+    github_access_token VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_username (username),
+    INDEX idx_email (email)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    jwt_token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    INDEX idx_expires_at (expires_at)
+);
+
+INSERT INTO users (username, email, password_hash) VALUES 
+('admin', 'admin@example.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5E'),
+('testuser', 'test@example.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5E')
+ON DUPLICATE KEY UPDATE id=id;
+
+-- =====================================================
+-- 2. PROJECT SERVICE DATABASE
+-- =====================================================
+USE project_db;
+
+CREATE TABLE IF NOT EXISTS projects (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    owner_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_owner_id (owner_id),
+    INDEX idx_name (name)
+);
+
+CREATE TABLE IF NOT EXISTS repositories (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    project_id BIGINT NOT NULL,
+    github_repo_id BIGINT NOT NULL,
+    repo_name VARCHAR(100) NOT NULL,
+    repo_full_name VARCHAR(200) NOT NULL,
+    repo_url VARCHAR(500) NOT NULL,
+    clone_url VARCHAR(500),
+    default_branch VARCHAR(50) DEFAULT 'main',
+    is_active BOOLEAN DEFAULT TRUE,
+    last_scan_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_project_repo (project_id, github_repo_id),
+    INDEX idx_project_id (project_id),
+    INDEX idx_repo_full_name (repo_full_name),
+    INDEX idx_last_scan_at (last_scan_at)
+);
+
+INSERT INTO projects (name, description, owner_id) VALUES 
+('E-Commerce Platform', 'Security scanning for online store', 1),
+('Mobile App Backend', 'API security vulnerabilities', 1)
+ON DUPLICATE KEY UPDATE id=id;
+
+INSERT INTO repositories (project_id, github_repo_id, repo_name, repo_full_name, repo_url, clone_url, default_branch) VALUES 
+(1, 123456, 'ecommerce-api', 'company/ecommerce-api', 'https://github.com/company/ecommerce-api', 'https://github.com/company/ecommerce-api.git', 'main'),
+(2, 789012, 'mobile-backend', 'company/mobile-backend', 'https://github.com/company/mobile-backend', 'https://github.com/company/mobile-backend.git', 'develop')
+ON DUPLICATE KEY UPDATE id=id;
+
+-- =====================================================
+-- 3. SCAN SERVICE DATABASE (FIXED - NO ENUMS)
+-- =====================================================
+USE scan_db;
+
+-- Scans table
+CREATE TABLE IF NOT EXISTS scans (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    project_id BIGINT NOT NULL,
+    repository_id BIGINT NOT NULL,
+    repository_url VARCHAR(500) NOT NULL,
+    branch VARCHAR(50) DEFAULT 'main',
+    scan_status VARCHAR(20) DEFAULT 'PENDING',
+    sonarqube_project_key VARCHAR(200),
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP NULL,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_project_id (project_id),
+    INDEX idx_repository_id (repository_id),
+    INDEX idx_scan_status (scan_status),
+    INDEX idx_started_at (started_at),
+    INDEX idx_created_at (created_at)
+);
+
+-- Vulnerabilities table (FIXED: VARCHAR instead of ENUM)
+CREATE TABLE IF NOT EXISTS vulnerabilities (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    scan_id BIGINT NOT NULL,
+    sonarqube_rule_id VARCHAR(100),
+    vulnerability_type VARCHAR(50),
+    severity VARCHAR(20) DEFAULT 'MAJOR',
+    file_path VARCHAR(500),
+    line_number INT,
+    message TEXT,
+    status VARCHAR(20) DEFAULT 'OPEN',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
+    INDEX idx_scan_id (scan_id),
+    INDEX idx_severity (severity),
+    INDEX idx_status (status),
+    INDEX idx_file_path (file_path(255))
+);
+
+-- AI Suggestions table (FIXED: DOUBLE for confidence_score)
+CREATE TABLE IF NOT EXISTS ai_suggestions (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    vulnerability_id BIGINT NOT NULL UNIQUE,
+    suggestion_text TEXT NOT NULL,
+    code_example TEXT,
+    confidence_score DOUBLE DEFAULT 0.85,
+    model_used VARCHAR(50) DEFAULT 'deepseek-chat',
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities(id) ON DELETE CASCADE,
+    INDEX idx_vulnerability_id (vulnerability_id),
+    INDEX idx_generated_at (generated_at)
+);
+
+-- Scan summary table
+CREATE TABLE IF NOT EXISTS scan_summary (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    scan_id BIGINT NOT NULL UNIQUE,
+    total_vulnerabilities INT DEFAULT 0,
+    blocker_count INT DEFAULT 0,
+    critical_count INT DEFAULT 0,
+    major_count INT DEFAULT 0,
+    minor_count INT DEFAULT 0,
+    info_count INT DEFAULT 0,
+    summary_json JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE,
+    INDEX idx_scan_id (scan_id)
+);
+
+-- =====================================================
+-- SAMPLE DATA
+-- =====================================================
+
+INSERT INTO scans (project_id, repository_id, repository_url, branch, scan_status, sonarqube_project_key, started_at, completed_at) VALUES
+(1, 1, 'https://github.com/company/ecommerce-api', 'main', 'COMPLETED', 'ecommerce-api-scan-1', NOW() - INTERVAL 2 DAY, NOW() - INTERVAL 1 DAY),
+(2, 2, 'https://github.com/company/mobile-backend', 'develop', 'COMPLETED', 'mobile-backend-scan-1', NOW() - INTERVAL 5 DAY, NOW() - INTERVAL 4 DAY),
+(1, 1, 'https://github.com/company/ecommerce-api', 'main', 'SCANNING', 'ecommerce-api-scan-2', NOW(), NULL);
+
+INSERT INTO vulnerabilities (scan_id, sonarqube_rule_id, vulnerability_type, severity, file_path, line_number, message, status) VALUES
+(1, 'java:S3649', 'SQL Injection', 'BLOCKER', 'src/main/java/com/ecommerce/UserController.java', 42, 'This SQL query is built with string concatenation. This allows SQL injection attacks.', 'OPEN'),
+(1, 'java:S2068', 'Hardcoded Credentials', 'CRITICAL', 'src/main/resources/application.properties', 15, 'Remove this hard-coded password.', 'IN_PROGRESS'),
+(1, 'java:S2259', 'Null Pointer Dereference', 'MAJOR', 'src/main/java/com/ecommerce/CheckoutService.java', 78, 'Possible null pointer dereference', 'RESOLVED'),
+(1, 'java:S1125', 'Redundant null check', 'MINOR', 'src/main/java/com/ecommerce/Utils.java', 23, 'Remove this redundant null check', 'OPEN'),
+(2, 'java:S1132', 'Method too complex', 'MAJOR', 'src/main/java/com/mobile/AuthService.java', 156, 'This method has too many branches', 'OPEN'),
+(2, 'java:S1144', 'Unused private method', 'INFO', 'src/main/java/com/mobile/Helper.java', 89, 'Remove this unused private method', 'FALSE_POSITIVE');
+
+INSERT INTO ai_suggestions (vulnerability_id, suggestion_text, code_example, confidence_score) VALUES
+(1, 'Use parameterized queries with PreparedStatement to prevent SQL injection.', '```java\nPreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE id = ?");\nstmt.setInt(1, userId);\n```', 0.95),
+(2, 'Move hardcoded credentials to environment variables.', '```properties\ndb.password=${DB_PASSWORD}\n```', 0.92),
+(3, 'Add a null check before accessing the object.', '```java\nif (object != null) {\n    object.method();\n}\n```', 0.88);
+
+INSERT INTO scan_summary (scan_id, total_vulnerabilities, blocker_count, critical_count, major_count, minor_count, info_count, summary_json) VALUES
+(1, 6, 1, 1, 2, 1, 1, '{"avg_severity": "HIGH", "fix_priority": "IMMEDIATE"}'),
+(2, 4, 0, 0, 2, 1, 1, '{"avg_severity": "MEDIUM", "fix_priority": "NORMAL"}');
+
+-- =====================================================
+-- CREATE DATABASE USERS
+-- =====================================================
+
+CREATE USER IF NOT EXISTS 'login_user'@'%' IDENTIFIED BY 'login_password_123';
+GRANT ALL PRIVILEGES ON login_db.* TO 'login_user'@'%';
+
+CREATE USER IF NOT EXISTS 'project_user'@'%' IDENTIFIED BY 'project_password_123';
+GRANT ALL PRIVILEGES ON project_db.* TO 'project_user'@'%';
+
+CREATE USER IF NOT EXISTS 'scan_user'@'%' IDENTIFIED BY 'scan_password_123';
+GRANT ALL PRIVILEGES ON scan_db.* TO 'scan_user'@'%';
+
+FLUSH PRIVILEGES;
+
+-- =====================================================
+-- VERIFICATION
+-- =====================================================
+
+SELECT 'login_db' AS database_name, table_name FROM information_schema.tables WHERE table_schema = 'login_db'
+UNION ALL
+SELECT 'project_db', table_name FROM information_schema.tables WHERE table_schema = 'project_db'
+UNION ALL
+SELECT 'scan_db', table_name FROM information_schema.tables WHERE table_schema = 'scan_db';

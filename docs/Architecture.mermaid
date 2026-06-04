@@ -1,0 +1,76 @@
+graph TB
+    subgraph "User/Browser"
+        User[👤 User]
+    end
+
+    subgraph "Docker Host (EC2 / Local)"
+        
+        subgraph "Docker Network: portal-network"
+            
+            subgraph "Frontend Layer"
+                FE[🌐 Frontend<br/>React App<br/>Port: 3000]
+            end
+
+            subgraph "Backend Services Layer"
+                LS[🔐 Login Service<br/>Spring Boot<br/>Port: 8081]
+                PS[📁 Project Service<br/>Spring Boot<br/>Port: 8082]
+                SCS[🔍 Scan Service<br/>Spring Boot<br/>Port: 8083]
+            end
+
+            subgraph "Database Layer"
+                MySQL[(🗄️ MySQL<br/>Host Machine<br/>Port: 3306)]
+            end
+
+            subgraph "SonarQube Stack"
+                SQDB[(🐘 PostgreSQL<br/>SonarQube DB<br/>Port: 5432)]
+                SQ[📊 SonarQube Server<br/>Version: 9.9.5 LTS<br/>Port: 9001]
+            end
+        end
+        
+        subgraph "External Services"
+            GH[🐙 GitHub<br/>Repository Hosting]
+            DS[🤖 DeepSeek API<br/>AI Suggestions]
+        end
+    end
+
+    %% Frontend to Backend
+    User -->|HTTP :3000| FE
+    FE -->|API Calls| LS
+    FE -->|API Calls| PS
+    FE -->|API Calls| SCS
+
+    %% Service to Database
+    LS -->|JDBC| MySQL
+    PS -->|JDBC| MySQL
+    SCS -->|JDBC| MySQL
+
+    %% Service to Service Communication
+    PS -->|HTTP :8081| LS
+    PS -->|HTTP :8083| SCS
+
+    %% Scan Service to SonarQube
+    SCS -->|sonar-scanner CLI<br/>HTTP :9000| SQ
+    SQ -->|JDBC| SQDB
+
+    %% External Services
+    PS -->|Git Clone| GH
+    SCS -->|Git Clone| GH
+    SCS -->|REST API| DS
+
+    %% Legend
+    subgraph Legend
+        L1[🔵 Containerized Service]
+        L2[🟢 Database]
+        L3[🟠 External Service]
+        L4[🟣 User Access]
+    end
+
+    style LS fill:#2196F3,color:#fff
+    style PS fill:#2196F3,color:#fff
+    style SCS fill:#2196F3,color:#fff
+    style FE fill:#4CAF50,color:#fff
+    style MySQL fill:#FF9800,color:#fff
+    style SQDB fill:#FF9800,color:#fff
+    style SQ fill:#9C27B0,color:#fff
+    style GH fill:#f5f5f5,color:#333
+    style DS fill:#f5f5f5,color:#333

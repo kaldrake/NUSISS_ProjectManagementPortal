@@ -1,0 +1,58 @@
+flowchart LR
+    subgraph "Developer"
+        Code[Write Code]
+        Commit[git commit]
+        Push[git push]
+    end
+    
+    subgraph "GitHub Actions"
+        Checkout[Checkout Code]
+        
+        subgraph "Build & Test"
+            Maven[Maven Build]
+            NPM[NPM Install & Build]
+            UnitTest[Unit Tests]
+        end
+        
+        subgraph "Security Scans"
+            Snyk[Snyk Dependency Scan]
+            Sonar[SonarQube Analysis]
+        end
+        
+        subgraph "Docker"
+            BuildDocker[Docker Build]
+            PushECR[Push to ECR]
+        end
+        
+        subgraph "Deploy"
+            DeployECS[Deploy to ECS Fargate]
+            SmokeTest[Smoke Tests]
+        end
+    end
+    
+    subgraph "AWS"
+        ECR[Elastic Container Registry]
+        ECS[ECS Fargate]
+    end
+    
+    Code --> Commit --> Push --> Checkout
+    Checkout --> Maven
+    Checkout --> NPM
+    Maven --> UnitTest
+    NPM --> UnitTest
+    UnitTest --> Snyk
+    UnitTest --> Sonar
+    Snyk --> BuildDocker
+    Sonar --> BuildDocker
+    BuildDocker --> PushECR
+    PushECR --> ECR
+    ECR --> DeployECS
+    DeployECS --> SmokeTest
+    SmokeTest --> ECS
+    
+    style Checkout fill:#f97316,stroke:#20232a,stroke-width:2px
+    style UnitTest fill:#3b82f6,stroke:#20232a,stroke-width:2px
+    style Snyk fill:#ef4444,stroke:#20232a,stroke-width:2px
+    style Sonar fill:#ef4444,stroke:#20232a,stroke-width:2px
+    style BuildDocker fill:#8b5cf6,stroke:#20232a,stroke-width:2px
+    style DeployECS fill:#10b981,stroke:#20232a,stroke-width:2px
