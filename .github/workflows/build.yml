@@ -262,6 +262,15 @@ jobs:
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-latest
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-${{ github.sha }}
 
+      - name: Create frontend .env
+        working-directory: project-portal-frontend
+        run: |
+          cat > .env << EOF
+          REACT_APP_LOGIN_API_URL=${{ secrets.REACT_APP_LOGIN_API_URL }}
+          REACT_APP_PROJECT_API_URL=${{ secrets.REACT_APP_PROJECT_API_URL }}
+          REACT_APP_SCAN_API_URL=${{ secrets.REACT_APP_SCAN_API_URL }}
+          EOF
+          
       # Frontend
       - name: Build, tag, and push frontend
         working-directory: project-portal-frontend
