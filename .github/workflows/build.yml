@@ -11,6 +11,7 @@ env:
   #SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
   AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: nusiss-project-management-portal
+  ECS_CLUSTER: project-portal-cluster
 
 jobs:
   backend-snyk:
@@ -289,3 +290,49 @@ jobs:
           echo "Project Service: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:project-${{ github.sha }}"
           echo "Scan Service: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-${{ github.sha }}"
           echo "Frontend: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:frontend-${{ github.sha }}"
+
+      # ── Deploy to ECS ────────────────────────────────────────────────────────
+      - name: Deploy login-service to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service login-service \
+            --force-new-deployment \
+            --health-check-grace-period-seconds 90 \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Deploy project-service to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service project-service \
+            --force-new-deployment \
+            --health-check-grace-period-seconds 90 \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Deploy scan-service to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service scan-service \
+            --force-new-deployment \
+            --health-check-grace-period-seconds 90 \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Deploy frontend to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service frontend-service \
+            --force-new-deployment \
+            --health-check-grace-period-seconds 90 \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Wait for ECS services to stabilize
+        run: |
+          echo "Waiting for all services to reach steady state..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services login-service project-service scan-service frontend-service \
+            --region ${{ env.AWS_REGION }}
+          echo "All ECS services are stable."
