@@ -21,6 +21,9 @@ FROM nginx:alpine
 # Copy built files from build stage (CRA uses 'build', not 'dist')
 COPY --from=build /app/build /usr/share/nginx/html
 
+# Copy nginx config to handle React Router client-side routing
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Expose port 80
 EXPOSE 80
 
