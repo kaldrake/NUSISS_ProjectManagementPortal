@@ -94,7 +94,6 @@ public class SonarQubeScannerService {
         );
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
-        pb.environment().put("JAVA_HOME", System.getProperty("java.home"));
         
         Process process = pb.start();
         
