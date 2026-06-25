@@ -188,22 +188,15 @@ public class ScanServiceClient {
      * Trigger a new scan
      * POST /api/scans/analyze
      */
-    public ScanResponseDTO triggerScan(Long projectId, Long repositoryId, String repositoryUrl, String branch) {
+    public ScanResponseDTO triggerScan(Long projectId, Long repositoryId, String repositoryUrl, String branch, String jwtToken) {
         String url = scanServiceUrl + "/api/scans/analyze";
-        
+
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            
-            // Add auth headers
-            String token = getJwtToken();
-            if (token != null) {
-                headers.setBearerAuth(token);
-            }
-            
-            Long userId = getCurrentUserId();
-            if (userId != null) {
-                headers.set("X-User-Id", String.valueOf(userId));
+
+            if (jwtToken != null) {
+                headers.setBearerAuth(jwtToken);
             }
             
             // Build request body

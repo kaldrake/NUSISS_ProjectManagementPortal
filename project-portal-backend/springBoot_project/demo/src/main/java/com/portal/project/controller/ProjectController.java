@@ -159,10 +159,12 @@ public class ProjectController {
     public ResponseEntity<Void> triggerScan(
             @PathVariable Long projectId,
             @PathVariable Long repositoryId,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId) {
-        
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
         log.info("POST /api/projects/{}/repositories/{}/scan - Triggering scan", projectId, repositoryId);
-        projectService.triggerScan(projectId, repositoryId);
+        String token = (authHeader != null && authHeader.startsWith("Bearer ")) ? authHeader.substring(7) : null;
+        projectService.triggerScan(projectId, repositoryId, token);
         return ResponseEntity.accepted().build();
     }
 

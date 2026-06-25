@@ -236,25 +236,26 @@ public class ProjectService {
      * Trigger a scan for a repository
      */
     @Async
-    public void triggerScan(Long projectId, Long repositoryId) {
+    public void triggerScan(Long projectId, Long repositoryId, String jwtToken) {
         log.info("Triggering scan for project ID: {}, repository ID: {}", projectId, repositoryId);
-        
+
         try {
             // Get repository details
             GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
                 .orElseThrow(() -> new RuntimeException("Repository not found: " + repositoryId));
-            
+
             // Verify repository belongs to project
             if (!repository.getProjectId().equals(projectId)) {
                 throw new RuntimeException("Repository does not belong to project: " + projectId);
             }
-            
+
             // Call Scan Service
             ScanResponseDTO scanResponse = scanServiceClient.triggerScan(
                 projectId,
                 repositoryId,
                 repository.getCloneUrl(),
-                repository.getDefaultBranch()
+                repository.getDefaultBranch(),
+                jwtToken
             );
             
             if (scanResponse != null && scanResponse.getScanId() != null) {
