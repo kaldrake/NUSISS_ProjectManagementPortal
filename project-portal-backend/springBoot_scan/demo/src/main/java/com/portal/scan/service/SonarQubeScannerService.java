@@ -94,6 +94,7 @@ public class SonarQubeScannerService {
         );
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
+        pb.environment().put("JAVA_HOME", System.getProperty("java.home"));
         
         Process process = pb.start();
         
@@ -107,7 +108,12 @@ public class SonarQubeScannerService {
             }
         }
         
-        int exitCode = process.waitFor();
+        boolean completed = process.waitFor(10, TimeUnit.MINUTES);
+        if (!completed) {
+            process.destroyForcibly();
+            throw new RuntimeException("SonarScanner timed out after 10 minutes");
+        }
+        int exitCode = process.exitValue();
         if (exitCode != 0) {
             log.error("SonarScanner failed with exit code: {}", exitCode);
             log.error("Full output:\n{}", output.toString());
