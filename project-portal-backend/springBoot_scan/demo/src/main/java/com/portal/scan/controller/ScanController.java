@@ -16,7 +16,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class ScanController {
     
     private static final Logger log = LoggerFactory.getLogger(ScanController.class);
