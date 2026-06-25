@@ -79,25 +79,21 @@ public class SonarQubeScannerService {
     }
     
     private void runSonarScanner(String repoPath, String projectKey) throws Exception {
-        String hostIp = getHostIp(); // Method to get your IP
-        String sonarHost = "http://" + hostIp + ":9001";
-        
         log.info("=== Starting SonarScanner ===");
         log.info("Project key: {}", projectKey);
         log.info("Repo path: {}", repoPath);
-        log.info("SonarQube host: {}", sonarHost);
-        
-        
+        log.info("SonarQube host: {}", sonarHostUrl);
+
         ProcessBuilder pb = new ProcessBuilder(
             "docker", "run", "--rm",
             "-v", repoPath + ":/usr/src",
             "sonarsource/sonar-scanner-cli",
             "-Dsonar.projectKey=" + projectKey,
             "-Dsonar.sources=.",
-            "-Dsonar.java.binaries=.",  
-            "-Dsonar.host.url=" + sonarHost,
+            "-Dsonar.java.binaries=.",
+            "-Dsonar.host.url=" + sonarHostUrl,
             "-Dsonar.login=" + sonarToken,
-            "-X"  // Add debug mode
+            "-X"
         );
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
@@ -122,15 +118,6 @@ public class SonarQubeScannerService {
         }
     }
 
-    private String getHostIp() {
-        try {
-            java.net.InetAddress localHost = java.net.InetAddress.getLocalHost();
-            return localHost.getHostAddress();
-        } catch (Exception e) {
-            return "192.168.1.100"; // fallback
-        }
-    }
-    
     private void waitForAnalysis(String projectKey) throws Exception {
         String url = sonarHostUrl + "/api/ce/activity?component=" + projectKey;
         HttpHeaders headers = new HttpHeaders();
