@@ -26,8 +26,12 @@ RUN apk add --no-cache git curl unzip bash && \
     curl -sSLo /tmp/sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip && \
     unzip /tmp/sonar-scanner.zip -d /opt && \
     mv /opt/sonar-scanner-5.0.1.3006-linux /opt/sonar-scanner && \
-    rm /tmp/sonar-scanner.zip && \
+    rm -rf /tmp/sonar-scanner.zip /opt/sonar-scanner/jre && \
     ln -s /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner
+
+# Ensure sonar-scanner uses the system JRE
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # Copy the built JAR from build stage
 COPY --from=build /app/target/*.jar app.jar
