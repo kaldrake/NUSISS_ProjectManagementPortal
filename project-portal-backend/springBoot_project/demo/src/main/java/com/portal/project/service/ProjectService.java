@@ -258,10 +258,8 @@ public class ProjectService {
                 jwtToken
             );
             
-            if (scanResponse != null && scanResponse.getScanId() != null) {
-                log.info("Scan triggered successfully with ID: {}", scanResponse.getScanId());
-                
-                // Update last scan timestamp
+            if (scanResponse != null) {
+                log.info("Scan triggered successfully for repository: {}", repositoryId);
                 gitHubRepositoryRepository.updateLastScanAt(repositoryId, LocalDateTime.now());
             } else {
                 log.error("Failed to trigger scan for repository: {}", repositoryId);

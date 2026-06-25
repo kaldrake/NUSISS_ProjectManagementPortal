@@ -85,15 +85,12 @@ public class SonarQubeScannerService {
         log.info("SonarQube host: {}", sonarHostUrl);
 
         ProcessBuilder pb = new ProcessBuilder(
-            "docker", "run", "--rm",
-            "-v", repoPath + ":/usr/src",
-            "sonarsource/sonar-scanner-cli",
+            "sonar-scanner",
             "-Dsonar.projectKey=" + projectKey,
             "-Dsonar.sources=.",
             "-Dsonar.java.binaries=.",
             "-Dsonar.host.url=" + sonarHostUrl,
-            "-Dsonar.login=" + sonarToken,
-            "-X"
+            "-Dsonar.login=" + sonarToken
         );
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
