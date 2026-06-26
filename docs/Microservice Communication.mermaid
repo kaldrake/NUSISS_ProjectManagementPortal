@@ -1,0 +1,52 @@
+graph TD
+    FE["🌐 Frontend\nReact + TypeScript\n:3000"]
+
+    subgraph "Backend Microservices"
+        LS["🔐 Login Service\n:8081\n\n• POST /api/auth/register\n• POST /api/auth/login\n• GET  /api/users/{id}"]
+        PS["📁 Project Service\n:8082\n\n• CRUD /api/projects\n• CRUD /api/projects/{id}/repositories\n• POST /api/projects/{id}/repositories/{rId}/scan\n• GET  /api/dashboard/summary"]
+        SCS["🔍 Scan Service\n:8083\n\n• POST /api/scans/trigger\n• GET  /api/scans/{repoId}/latest\n• GET  /api/scans/{scanId}/vulnerabilities\n• GET  /api/scans/{scanId}/ai-suggestions"]
+    end
+
+    subgraph "Databases"
+        LDB[("login_db\nusers\nsessions")]
+        PDB[("project_db\nprojects\nrepositories")]
+        SDB[("scan_db\nscans\nvulnerabilities\nai_suggestions\nscan_summary")]
+    end
+
+    subgraph "External Services"
+        GH["🐙 GitHub API\nRepo metadata + Git clone"]
+        SQ["📊 SonarQube\n:9001\nStatic analysis"]
+        DS["🤖 DeepSeek API\nAI fix suggestions"]
+    end
+
+    %% Frontend → all services
+    FE -->|"Bearer JWT"| LS
+    FE -->|"Bearer JWT + X-User-Id"| PS
+    FE -->|"Bearer JWT"| SCS
+
+    %% Service-to-service (internal HTTP)
+    PS -->|"GET /api/users/{id}\n(validate token owner)"| LS
+    PS -->|"POST /api/scans/trigger\n(delegate scan job)"| SCS
+
+    %% Services → their DBs
+    LS --- LDB
+    PS --- PDB
+    SCS --- SDB
+
+    %% External integrations
+    PS -->|"GitHub REST API\n(repo search & metadata)"| GH
+    SCS -->|"git clone"| GH
+    SCS -->|"sonar-scanner CLI\n+ REST API (poll + fetch issues)"| SQ
+    SCS -->|"POST /chat/completions"| DS
+
+    %% Styling
+    style FE fill:#4CAF50,color:#fff
+    style LS fill:#2196F3,color:#fff
+    style PS fill:#2196F3,color:#fff
+    style SCS fill:#2196F3,color:#fff
+    style LDB fill:#FF9800,color:#fff
+    style PDB fill:#FF9800,color:#fff
+    style SDB fill:#FF9800,color:#fff
+    style GH fill:#24292e,color:#fff
+    style SQ fill:#9C27B0,color:#fff
+    style DS fill:#333,color:#fff

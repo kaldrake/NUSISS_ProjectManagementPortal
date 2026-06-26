@@ -1,0 +1,72 @@
+sequenceDiagram
+    actor User
+    participant FE as React Frontend
+    participant PS as Project Service :8082
+    participant SCS as Scan Service :8083
+    participant GH as GitHub
+    participant SQ as SonarQube :9001
+    participant DS as DeepSeek API
+    participant DB as scan_db (MySQL)
+
+    User->>FE: Click "Scan" on a repository
+    FE->>PS: POST /api/projects/{id}/repositories/{repoId}/scan
+    PS->>SCS: POST /api/scans/trigger (projectId, repositoryId, cloneUrl, branch)
+
+    rect rgb(230, 245, 255)
+        Note over SCS,DB: Scan Initialisation (synchronous)
+        SCS->>DB: INSERT scan (status=PENDING)
+        DB-->>SCS: scan_id
+        SCS-->>PS: 202 Accepted { scanId }
+        PS-->>FE: 202 { scanId }
+        FE-->>User: Show "Scan started" toast
+    end
+
+    rect rgb(255, 245, 230)
+        Note over SCS,SQ: Scan Execution (@Async background thread)
+        SCS->>DB: UPDATE scan SET status=SCANNING
+        SCS->>GH: git clone <cloneUrl> --branch <branch>
+        GH-->>SCS: Source code files
+
+        SCS->>SCS: Write sonar-project.properties
+        SCS->>SQ: Run sonar-scanner CLI (HTTP :9001)
+        SQ->>SQ: Analyse source code
+        SQ-->>SCS: Analysis task token
+
+        loop Poll until analysis complete
+            SCS->>SQ: GET /api/ce/task?id=<token>
+            SQ-->>SCS: { status: IN_PROGRESS | SUCCESS | FAILED }
+        end
+    end
+
+    rect rgb(230, 255, 230)
+        Note over SCS,DB: Result Collection
+        SCS->>SQ: GET /api/issues/search?projectKeys=<key>
+        SQ-->>SCS: Issues list (rule, severity, file, line, message)
+        SCS->>DB: INSERT vulnerabilities (bulk)
+        SCS->>DB: INSERT scan_summary (blocker/critical/major/minor/info counts)
+        SCS->>DB: UPDATE scan SET status=COMPLETED, completed_at=NOW()
+    end
+
+    rect rgb(245, 230, 255)
+        Note over SCS,DS: AI Suggestion Generation (CRITICAL/BLOCKER only)
+        loop For each critical/blocker vulnerability
+            SCS->>DS: POST /chat/completions (vulnerability details)
+            DS-->>SCS: { suggestion_text, code_example, confidence_score }
+            SCS->>DB: INSERT ai_suggestions
+        end
+    end
+
+    rect rgb(230, 245, 255)
+        Note over FE,DB: User Views Results
+        User->>FE: Open repository vulnerabilities tab
+        FE->>SCS: GET /api/scans/{repoId}/latest
+        SCS->>DB: SELECT scan + vulnerabilities + ai_suggestions
+        DB-->>SCS: Full scan record
+        SCS-->>FE: { scan, vulnerabilities[], summaries }
+        FE-->>User: Render vulnerability list with severity badges & AI suggestions
+    end
+
+    alt Scan fails (clone error / SonarQube timeout)
+        SCS->>DB: UPDATE scan SET status=FAILED, error_message=<reason>
+        User->>FE: Sees "Scan Failed" status
+    end

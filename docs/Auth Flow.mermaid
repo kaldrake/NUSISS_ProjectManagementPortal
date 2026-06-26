@@ -1,0 +1,60 @@
+sequenceDiagram
+    actor User
+    participant FE as React Frontend
+    participant LS as Login Service :8081
+    participant DB as login_db (MySQL)
+
+    %% Registration
+    rect rgb(230, 245, 255)
+        Note over User,DB: Registration Flow
+        User->>FE: Fill register form (username, email, password)
+        FE->>LS: POST /api/auth/register
+        LS->>DB: Check email/username uniqueness
+        DB-->>LS: OK (unique)
+        LS->>LS: BCrypt hash password
+        LS->>DB: INSERT INTO users
+        DB-->>LS: User saved
+        LS->>LS: Generate JWT token
+        LS-->>FE: 200 { token, userId, username, role }
+        FE->>FE: Store token in localStorage
+        FE-->>User: Redirect to Dashboard
+    end
+
+    %% Login
+    rect rgb(230, 255, 230)
+        Note over User,DB: Login Flow
+        User->>FE: Fill login form (email, password)
+        FE->>LS: POST /api/auth/login
+        LS->>DB: SELECT user WHERE email = ?
+        DB-->>LS: User record
+        LS->>LS: BCrypt verify password
+        LS->>LS: Generate JWT token
+        LS->>DB: INSERT INTO sessions (jwt_token, expires_at)
+        DB-->>LS: Session saved
+        LS-->>FE: 200 { token, userId, username, role }
+        FE->>FE: Store token in localStorage
+        FE-->>User: Redirect to Dashboard
+    end
+
+    %% Authenticated Request
+    rect rgb(255, 245, 230)
+        Note over User,DB: Authenticated API Call (Project / Scan Service)
+        User->>FE: Navigate to Projects
+        FE->>FE: Read JWT from localStorage
+        FE->>+LS: GET /api/projects (Authorization: Bearer <token>)
+        Note right of LS: JwtAuthenticationFilter intercepts
+        LS->>LS: Validate JWT signature & expiry
+        LS->>LS: Extract userId, role → set SecurityContext
+        LS-->>-FE: 200 { projects[] }
+        FE-->>User: Render Projects page
+    end
+
+    %% Token Expiry
+    rect rgb(255, 230, 230)
+        Note over User,DB: Expired Token
+        FE->>LS: Request with expired JWT
+        LS->>LS: JWT validation fails
+        LS-->>FE: 401 Unauthorized
+        FE->>FE: Clear localStorage
+        FE-->>User: Redirect to Login page
+    end

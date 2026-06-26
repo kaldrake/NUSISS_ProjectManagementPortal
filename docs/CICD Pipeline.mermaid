@@ -2,57 +2,81 @@ flowchart LR
     subgraph "Developer"
         Code[Write Code]
         Commit[git commit]
-        Push[git push]
+        Push["git push
+(main / feature-projectScan)"]
     end
-    
-    subgraph "GitHub Actions"
-        Checkout[Checkout Code]
-        
-        subgraph "Build & Test"
-            Maven[Maven Build]
-            NPM[NPM Install & Build]
-            UnitTest[Unit Tests]
+
+    subgraph "GitHub Actions: docker-build-push"
+
+        Checkout[Checkout Code\nactions/checkout@v4]
+
+        subgraph "AWS Auth"
+            AWSCreds[Configure AWS Credentials\nAccess Key + Secret Key]
+            ECRLogin[Login to Amazon ECR\namazon-ecr-login@v2]
         end
-        
-        subgraph "Security Scans"
-            Snyk[Snyk Dependency Scan]
-            Sonar[SonarQube Analysis]
+
+        subgraph "Docker Build × 4"
+            B1["Build login-service
+project-portal-backend/springBoot_login"]
+            B2["Build project-service
+project-portal-backend/springBoot_project"]
+            B3["Build scan-service
+project-portal-backend/springBoot_scan"]
+            B4["Build frontend
+project-portal-frontend (Nginx)"]
         end
-        
-        subgraph "Docker"
-            BuildDocker[Docker Build]
-            PushECR[Push to ECR]
+
+        subgraph "Push to ECR (2 tags each)"
+            T1["login-latest
+login-{sha}"]
+            T2["project-latest
+project-{sha}"]
+            T3["scan-latest
+scan-{sha}"]
+            T4["frontend-latest
+frontend-{sha}"]
         end
-        
-        subgraph "Deploy"
-            DeployECS[Deploy to ECS Fargate]
-            SmokeTest[Smoke Tests]
-        end
+
+        Output[Output Image URIs]
     end
-    
-    subgraph "AWS"
-        ECR[Elastic Container Registry]
-        ECS[ECS Fargate]
+
+    subgraph "AWS ECR (ap-southeast-1)"
+        ECR[("📦 nusiss_projectmanagementportal
+4 image repositories")]
     end
-    
+
+    subgraph "Planned (Not Yet Implemented)"
+        Snyk["🚫 Snyk Dependency Scan
+(disabled — token limit)"]
+        SonarCI["🚫 SonarQube CI Analysis
+(not yet wired in pipeline)"]
+        ECS["🚫 Deploy to ECS Fargate
+(not yet implemented)"]
+    end
+
     Code --> Commit --> Push --> Checkout
-    Checkout --> Maven
-    Checkout --> NPM
-    Maven --> UnitTest
-    NPM --> UnitTest
-    UnitTest --> Snyk
-    UnitTest --> Sonar
-    Snyk --> BuildDocker
-    Sonar --> BuildDocker
-    BuildDocker --> PushECR
-    PushECR --> ECR
-    ECR --> DeployECS
-    DeployECS --> SmokeTest
-    SmokeTest --> ECS
-    
-    style Checkout fill:#f97316,stroke:#20232a,stroke-width:2px
-    style UnitTest fill:#3b82f6,stroke:#20232a,stroke-width:2px
-    style Snyk fill:#ef4444,stroke:#20232a,stroke-width:2px
-    style Sonar fill:#ef4444,stroke:#20232a,stroke-width:2px
-    style BuildDocker fill:#8b5cf6,stroke:#20232a,stroke-width:2px
-    style DeployECS fill:#10b981,stroke:#20232a,stroke-width:2px
+    Checkout --> AWSCreds --> ECRLogin
+    ECRLogin --> B1 & B2 & B3 & B4
+    B1 --> T1 --> ECR
+    B2 --> T2 --> ECR
+    B3 --> T3 --> ECR
+    B4 --> T4 --> ECR
+    ECR --> Output
+
+    %% Styling
+    style Checkout fill:#f97316,color:#fff
+    style AWSCreds fill:#FF9800,color:#fff
+    style ECRLogin fill:#FF9800,color:#fff
+    style B1 fill:#8b5cf6,color:#fff
+    style B2 fill:#8b5cf6,color:#fff
+    style B3 fill:#8b5cf6,color:#fff
+    style B4 fill:#8b5cf6,color:#fff
+    style T1 fill:#3b82f6,color:#fff
+    style T2 fill:#3b82f6,color:#fff
+    style T3 fill:#3b82f6,color:#fff
+    style T4 fill:#3b82f6,color:#fff
+    style ECR fill:#FF9800,color:#fff
+    style Output fill:#10b981,color:#fff
+    style Snyk fill:#6b7280,color:#fff
+    style SonarCI fill:#6b7280,color:#fff
+    style ECS fill:#6b7280,color:#fff
