@@ -39,3 +39,4 @@ secrets.yml
 .env.*.local
 .env.ec2
 .env.*ec2
+.vscode*

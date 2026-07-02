@@ -1,0 +1,100 @@
+%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
+flowchart LR
+
+    subgraph "Actors (Personas)"
+        PM["👔 Project Manager"]
+        TL["🧭 Technical Lead"]
+        DSE["🛡️ DevSecOps Engineer"]
+        DEV["💻 Developer"]
+    end
+
+    PortalUser(("👤 Portal User
+(shared permission set)"))
+
+    PM -.->|"is a"| PortalUser
+    TL -.->|"is a"| PortalUser
+    DSE -.->|"is a"| PortalUser
+    DEV -.->|"is a"| PortalUser
+
+    subgraph "NUSISS Project Management Portal"
+
+        subgraph "Account & Auth"
+            UC1([Register Account])
+            UC2([Log In / Log Out])
+            UC3([View Own Profile])
+        end
+
+        subgraph "Project Management"
+            UC4([Create Project])
+            UC5([View Projects
+& Dashboard Summary])
+            UC6([Update Project])
+            UC7([Delete Project])
+        end
+
+        subgraph "Repository Management"
+            UC8([Add GitHub Repository])
+            UC9([View Repositories])
+            UC10([Remove Repository])
+        end
+
+        subgraph "Scan Management"
+            UC11([Trigger Scan
+via SonarQube])
+            UC12([View Scan Status])
+            UC13([View Scan History])
+        end
+
+        subgraph "Vulnerability Management"
+            UC14([View Vulnerabilities])
+            UC15([View Vulnerability Detail])
+            UC16([Update Vulnerability Status
+Open / In Progress / Resolved / False Positive])
+            UC17([Regenerate AI Fix Suggestion
+DeepSeek API — Blocker/Critical only])
+        end
+
+    end
+
+    PortalUser --- UC1
+    PortalUser --- UC2
+    PortalUser --- UC3
+    PortalUser --- UC4
+    PortalUser --- UC5
+    PortalUser --- UC6
+    PortalUser --- UC7
+    PortalUser --- UC8
+    PortalUser --- UC9
+    PortalUser --- UC10
+    PortalUser --- UC11
+    PortalUser --- UC12
+    PortalUser --- UC13
+    PortalUser --- UC14
+    PortalUser --- UC15
+    PortalUser --- UC16
+    PortalUser --- UC17
+
+    
+    %% Styling
+    style PM fill:#4CAF50,color:#fff
+    style TL fill:#2196F3,color:#fff
+    style DSE fill:#9C27B0,color:#fff
+    style DEV fill:#FF9800,color:#fff
+    style PortalUser fill:#607D8B,color:#fff
+    style UC1 fill:#E3F2FD,color:#000
+    style UC2 fill:#E3F2FD,color:#000
+    style UC3 fill:#E3F2FD,color:#000
+    style UC4 fill:#E8F5E9,color:#000
+    style UC5 fill:#E8F5E9,color:#000
+    style UC6 fill:#E8F5E9,color:#000
+    style UC7 fill:#E8F5E9,color:#000
+    style UC8 fill:#FFF3E0,color:#000
+    style UC9 fill:#FFF3E0,color:#000
+    style UC10 fill:#FFF3E0,color:#000
+    style UC11 fill:#F3E5F5,color:#000
+    style UC12 fill:#F3E5F5,color:#000
+    style UC13 fill:#F3E5F5,color:#000
+    style UC14 fill:#FFEBEE,color:#000
+    style UC15 fill:#FFEBEE,color:#000
+    style UC16 fill:#FFEBEE,color:#000
+    style UC17 fill:#FFEBEE,color:#000
