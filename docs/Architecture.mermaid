@@ -84,6 +84,7 @@ nusiss_projectmanagementportal
     %% Scan Service to SonarQube
     SCS -->|"sonar-scanner CLI → HTTP :9001"| SQ
     SQ -->|"JDBC"| SQDB
+    SQ -->|"Scan Results"| SCS
 
     %% External integrations
     PS -->|"GitHub API (repo metadata)"| GH

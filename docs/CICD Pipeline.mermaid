@@ -46,13 +46,20 @@ frontend-{sha}"]
 4 image repositories")]
     end
 
+    subgraph "AWS ECS Fargate (ap-southeast-1)"
+        FDeploy["Task Definitions reference
+*-latest image tags"]
+        F1["login-service task"]
+        F2["project-service task"]
+        F3["scan-service task"]
+        F4["frontend task"]
+    end
+
     subgraph "Planned (Not Yet Implemented)"
         Snyk["🚫 Snyk Dependency Scan
 (disabled — token limit)"]
         SonarCI["🚫 SonarQube CI Analysis
 (not yet wired in pipeline)"]
-        ECS["🚫 Deploy to ECS Fargate
-(not yet implemented)"]
     end
 
     Code --> Commit --> Push --> Checkout
@@ -63,6 +70,8 @@ frontend-{sha}"]
     B3 --> T3 --> ECR
     B4 --> T4 --> ECR
     ECR --> Output
+    ECR -.->|"manual redeploy pulls :latest"| FDeploy
+    FDeploy --> F1 & F2 & F3 & F4
 
     %% Styling
     style Checkout fill:#f97316,color:#fff
@@ -78,6 +87,10 @@ frontend-{sha}"]
     style T4 fill:#3b82f6,color:#fff
     style ECR fill:#FF9800,color:#fff
     style Output fill:#10b981,color:#fff
+    style FDeploy fill:#10b981,color:#fff
+    style F1 fill:#0ea5e9,color:#fff
+    style F2 fill:#0ea5e9,color:#fff
+    style F3 fill:#0ea5e9,color:#fff
+    style F4 fill:#0ea5e9,color:#fff
     style Snyk fill:#6b7280,color:#fff
     style SonarCI fill:#6b7280,color:#fff
-    style ECS fill:#6b7280,color:#fff
