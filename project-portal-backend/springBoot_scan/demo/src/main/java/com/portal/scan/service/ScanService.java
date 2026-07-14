@@ -79,9 +79,11 @@ public class ScanService {
                 if (isCriticalSeverity(issue.getSeverity())) {
                     try {
                     	 log.info(">>> CALLING DEEPSEEK NOW <<<");
-                        String suggestionText = deepSeekService.generateFixSuggestion(vuln);
-                        log.info("DeepSeek returned: {}", suggestionText);
-                        AiSuggestion aiSuggestion = new AiSuggestion(vuln, suggestionText, "");
+                        AiSuggestionResult result = deepSeekService.generateFixSuggestion(vuln);
+                        log.info("DeepSeek returned (confidence={}): {}", result.getConfidenceScore(), result.getSuggestionText());
+                        AiSuggestion aiSuggestion = new AiSuggestion(vuln, result.getSuggestionText(), result.getCodeExample());
+                        aiSuggestion.setConfidenceScore(result.getConfidenceScore());
+                        aiSuggestion.setModelUsed(result.isUsedFallback() ? "fallback-template" : deepSeekService.getModel());
                         aiSuggestionRepository.save(aiSuggestion);
                         Thread.sleep(500);
                     } catch (Exception e) {
@@ -197,13 +199,16 @@ public class ScanService {
         Vulnerability vuln = vulnerabilityRepository.findById(vulnerabilityId)
             .orElseThrow(() -> new RuntimeException("Vulnerability not found with id: " + vulnerabilityId));
         
-        String suggestionText = deepSeekService.generateFixSuggestion(vuln);
-        
+        AiSuggestionResult result = deepSeekService.generateFixSuggestion(vuln);
+
         AiSuggestion aiSuggestion = aiSuggestionRepository.findByVulnerabilityId(vulnerabilityId)
             .orElse(new AiSuggestion());
-        
+
         aiSuggestion.setVulnerability(vuln);
-        aiSuggestion.setSuggestionText(suggestionText);
+        aiSuggestion.setSuggestionText(result.getSuggestionText());
+        aiSuggestion.setCodeExample(result.getCodeExample());
+        aiSuggestion.setConfidenceScore(result.getConfidenceScore());
+        aiSuggestion.setModelUsed(result.isUsedFallback() ? "fallback-template" : deepSeekService.getModel());
         aiSuggestion.setGeneratedAt(LocalDateTime.now());
         aiSuggestionRepository.save(aiSuggestion);
         

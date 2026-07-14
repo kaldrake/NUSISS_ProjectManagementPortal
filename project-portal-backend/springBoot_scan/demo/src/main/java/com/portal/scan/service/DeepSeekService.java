@@ -27,12 +27,19 @@ public class DeepSeekService {
 	private final RestTemplate restTemplate = new RestTemplate();
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	public String generateFixSuggestion(Vulnerability vulnerability) {
-		
-		log.info("in generate fix suggestion");		
+	public String getModel() {
+		return model;
+	}
+
+	// Confidence assigned whenever we couldn't get a real, complete answer from the model.
+	private static final double FALLBACK_CONFIDENCE = 0.2;
+
+	public AiSuggestionResult generateFixSuggestion(Vulnerability vulnerability) {
+
+		log.info("in generate fix suggestion");
 		if (apiKey == null || apiKey.isEmpty()) {
 			log.warn("DeepSeek API key not configured, returning default suggestion");
-			return getDefaultSuggestion(vulnerability);
+			return new AiSuggestionResult(getDefaultSuggestion(vulnerability), "", FALLBACK_CONFIDENCE, true);
 		}
 
 		String prompt = buildPrompt(vulnerability);
@@ -42,41 +49,66 @@ public class DeepSeekService {
 			headers.setContentType(MediaType.APPLICATION_JSON);
 			headers.setBearerAuth(apiKey);
 
+			// response_format json_object: ask DeepSeek to return structured fields
+			// (including a self-reported confidence) instead of free-form prose.
 			String requestBody = String.format(
-					"{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"temperature\":0.3,\"max_tokens\":500}",
+					"{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],"
+							+ "\"temperature\":0.3,\"max_tokens\":600,"
+							+ "\"response_format\":{\"type\":\"json_object\"}}",
 					model, escapeJson(prompt));
 
 			HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
 			ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST, entity, String.class);
 
 			JsonNode root = objectMapper.readTree(response.getBody());
-			String suggestion = root.path("choices").get(0).path("message").path("content").asText();
+			JsonNode choice = root.path("choices").get(0);
+			String finishReason = choice.path("finish_reason").asText("stop");
+			String content = choice.path("message").path("content").asText();
 
-			log.info("Generated AI suggestion for vulnerability: {}", vulnerability.getId());
-			return suggestion;
+			// The API envelope is JSON; "content" is itself a JSON string because of
+			// response_format above, so it needs a second parse pass.
+			JsonNode parsed = objectMapper.readTree(content);
+			String explanation = parsed.path("explanation").asText("");
+			String steps = parsed.path("steps").asText("");
+			String suggestionText = (explanation + "\n\n" + steps).trim();
+			String codeExample = parsed.path("code_example").asText("");
+			double rawConfidence = parsed.path("confidence").asDouble(0.5);
+
+			double confidence = Math.max(0.0, Math.min(1.0, rawConfidence));
+			if ("length".equals(finishReason)) {
+				// Response got cut off — don't trust it as much as a complete answer.
+				confidence = Math.min(confidence, 0.5);
+			}
+			if (suggestionText.isBlank() || codeExample.isBlank()) {
+				// Model skipped a required field; the answer is incomplete.
+				confidence = Math.min(confidence, 0.4);
+			}
+
+			log.info("Generated AI suggestion for vulnerability: {} (confidence={})", vulnerability.getId(), confidence);
+			return new AiSuggestionResult(suggestionText, codeExample, confidence, false);
 
 		} catch (Exception e) {
 			log.error("DeepSeek API call failed: {}", e.getMessage());
-			return getDefaultSuggestion(vulnerability);
+			return new AiSuggestionResult(getDefaultSuggestion(vulnerability), "", FALLBACK_CONFIDENCE, true);
 		}
 	}
 
 	private String buildPrompt(Vulnerability vulnerability) {
 		return String.format("""
-				You are a security expert. Provide a fix for this vulnerability:
+				You are a security expert. Analyze this vulnerability and respond with ONLY a JSON object
+				(no markdown, no prose outside the JSON) with these exact keys:
+				{
+				  "explanation": "1 sentence describing the risk",
+				  "steps": "3-4 step-by-step fix instructions",
+				  "code_example": "a code snippet showing the fix",
+				  "confidence": a number from 0.0 to 1.0, how confident you are this fix is correct for this exact code
+				}
 
 				Type: %s
 				Severity: %s
 				File: %s
 				Line: %d
 				Description: %s
-
-				Provide:
-				1. A brief explanation of the risk (1 sentence)
-				2. Step-by-step fix instructions (3-4 steps)
-				3. A code example showing the fix
-
-				Keep response concise, under 500 words.
 				""",
 				vulnerability.getVulnerabilityType() != null ? vulnerability.getVulnerabilityType() : "Security Issue",
 				vulnerability.getSeverity(), vulnerability.getFilePath(),
