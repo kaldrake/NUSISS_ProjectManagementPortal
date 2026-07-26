@@ -201,6 +201,95 @@ jobs:
 #        continue-on-error: true
 
   # =============================================
+  # SONARCLOUD SCANS
+  # =============================================
+  backend-sonar:
+    name: Backend SonarCloud Scan
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: login
+            key: nusiss-portal_login-service
+            path: project-portal-backend/springBoot_login/demo
+          - name: project
+            key: nusiss-portal_project-service
+            path: project-portal-backend/springBoot_project/demo
+          - name: scan
+            key: nusiss-portal_scan-service
+            path: project-portal-backend/springBoot_scan/demo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles(format('{0}/pom.xml', matrix.service.path)) }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build and analyze (${{ matrix.service.name }})
+        working-directory: ${{ matrix.service.path }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        run: >
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.projectKey=${{ matrix.service.key }}
+          -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+
+  frontend-sonar:
+    name: Frontend SonarCloud Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: project-portal-frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: project-portal-frontend
+        run: npm ci
+
+      - name: Run tests with coverage
+        working-directory: project-portal-frontend
+        run: CI=true npm test -- --coverage --watchAll=false
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        with:
+          projectBaseDir: project-portal-frontend
+          args: >
+            -Dsonar.projectKey=nusiss-portal_frontend
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+
+  # =============================================
   # DOCKER BUILD & PUSH TO ECR
   # =============================================
   docker-build-push:

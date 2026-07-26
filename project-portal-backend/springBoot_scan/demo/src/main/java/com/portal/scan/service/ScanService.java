@@ -33,7 +33,7 @@ public class ScanService {
     private SonarQubeScannerService sonarQubeScanner;
     
     @Autowired
-    private DeepSeekService deepSeekService;
+    private AiSuggestionRouter aiSuggestionRouter;
     
     @Async
     @Transactional
@@ -78,12 +78,12 @@ public class ScanService {
                 
                 if (isCriticalSeverity(issue.getSeverity())) {
                     try {
-                    	 log.info(">>> CALLING DEEPSEEK NOW <<<");
-                        AiSuggestionResult result = deepSeekService.generateFixSuggestion(vuln);
-                        log.info("DeepSeek returned (confidence={}): {}", result.getConfidenceScore(), result.getSuggestionText());
+                    	 log.info(">>> CALLING AI SUGGESTION ROUTER NOW <<<");
+                        AiSuggestionResult result = aiSuggestionRouter.generateFixSuggestion(vuln);
+                        log.info("AI provider returned (confidence={}): {}", result.getConfidenceScore(), result.getSuggestionText());
                         AiSuggestion aiSuggestion = new AiSuggestion(vuln, result.getSuggestionText(), result.getCodeExample());
                         aiSuggestion.setConfidenceScore(result.getConfidenceScore());
-                        aiSuggestion.setModelUsed(result.isUsedFallback() ? "fallback-template" : deepSeekService.getModel());
+                        aiSuggestion.setModelUsed(aiSuggestionRouter.getModelUsed(result));
                         aiSuggestionRepository.save(aiSuggestion);
                         Thread.sleep(500);
                     } catch (Exception e) {
@@ -199,7 +199,7 @@ public class ScanService {
         Vulnerability vuln = vulnerabilityRepository.findById(vulnerabilityId)
             .orElseThrow(() -> new RuntimeException("Vulnerability not found with id: " + vulnerabilityId));
         
-        AiSuggestionResult result = deepSeekService.generateFixSuggestion(vuln);
+        AiSuggestionResult result = aiSuggestionRouter.generateFixSuggestion(vuln);
 
         AiSuggestion aiSuggestion = aiSuggestionRepository.findByVulnerabilityId(vulnerabilityId)
             .orElse(new AiSuggestion());
@@ -208,7 +208,7 @@ public class ScanService {
         aiSuggestion.setSuggestionText(result.getSuggestionText());
         aiSuggestion.setCodeExample(result.getCodeExample());
         aiSuggestion.setConfidenceScore(result.getConfidenceScore());
-        aiSuggestion.setModelUsed(result.isUsedFallback() ? "fallback-template" : deepSeekService.getModel());
+        aiSuggestion.setModelUsed(aiSuggestionRouter.getModelUsed(result));
         aiSuggestion.setGeneratedAt(LocalDateTime.now());
         aiSuggestionRepository.save(aiSuggestion);
         
