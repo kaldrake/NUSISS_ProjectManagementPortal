@@ -2,7 +2,7 @@ name: Combined Security Scans (Separate Frontend/Backend)
 
 on:
   push:
-    branches: [main, feature-projectScan]
+    branches: [main, feature-sonarCloud]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
