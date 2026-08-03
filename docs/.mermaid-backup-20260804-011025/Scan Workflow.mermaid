@@ -1,4 +1,4 @@
-%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
 sequenceDiagram
     actor User
     participant FE as React Frontend
@@ -6,7 +6,7 @@ sequenceDiagram
     participant SCS as Scan Service :8083
     participant GH as GitHub
     participant SQ as SonarQube :9001
-    participant AI as AI Suggestion Router (Gemini)
+    participant DS as DeepSeek API
     participant DB as scan_db (MySQL)
 
     User->>FE: Click "Scan" on a repository
@@ -49,10 +49,10 @@ sequenceDiagram
     end
 
     rect rgb(245, 230, 255)
-        Note over SCS,AI: AI Suggestion Generation via router (CRITICAL/BLOCKER only)
+        Note over SCS,DS: AI Suggestion Generation (CRITICAL/BLOCKER only)
         loop For each critical/blocker vulnerability
-            SCS->>AI: Request fix suggestion (vulnerability details)
-            AI-->>SCS: { suggestion_text, code_example, confidence_score }
+            SCS->>DS: POST /chat/completions (vulnerability details)
+            DS-->>SCS: { suggestion_text, code_example, confidence_score }
             SCS->>DB: INSERT ai_suggestions
         end
     end

@@ -1,23 +1,23 @@
 %%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
 graph TD
-    FE["🌐 Frontend\nReact + TypeScript\n:3000"]
+    FE["🌐 Frontend<br>React + TypeScript<br>:3000"]
 
     subgraph "Backend Microservices"
-        LS["🔐 Login Service\n:8081\n\n• POST /api/auth/register\n• POST /api/auth/login\n• GET  /api/users/{id}"]
-        PS["📁 Project Service\n:8082\n\n• CRUD /api/projects\n• CRUD /api/projects/{id}/repositories\n• POST /api/projects/{id}/repositories/{rId}/scan\n• GET  /api/dashboard/summary"]
-        SCS["🔍 Scan Service\n:8083\n\n• POST /api/scans/trigger\n• GET  /api/scans/{repoId}/latest\n• GET  /api/scans/{scanId}/vulnerabilities\n• GET  /api/scans/{scanId}/ai-suggestions"]
+        LS["🔐 Login Service<br>:8081<br><br>• POST /api/auth/register<br>• POST /api/auth/login<br>• GET  /api/users/{id}"]
+        PS["📁 Project Service<br>:8082<br><br>• CRUD /api/projects<br>• CRUD /api/projects/{id}/repositories<br>• POST /api/projects/{id}/repositories/{rId}/scan<br>• GET  /api/dashboard/summary"]
+        SCS["🔍 Scan Service<br>:8083<br><br>• POST /api/scans/trigger<br>• GET  /api/scans/{repoId}/latest<br>• GET  /api/scans/{scanId}/vulnerabilities<br>• GET  /api/scans/{scanId}/ai-suggestions"]
     end
 
     subgraph "Databases"
-        LDB[("login_db\nusers\nsessions")]
-        PDB[("project_db\nprojects\nrepositories")]
-        SDB[("scan_db\nscans\nvulnerabilities\nai_suggestions\nscan_summary")]
+        LDB[("login_db<br>users<br>sessions")]
+        PDB[("project_db<br>projects<br>repositories")]
+        SDB[("scan_db<br>scans<br>vulnerabilities<br>ai_suggestions<br>scan_summary")]
     end
 
     subgraph "External Services"
-        GH["🐙 GitHub API\nRepo metadata + Git clone"]
-        SQ["📊 SonarQube\n:9001\nStatic analysis"]
-        DS["🤖 DeepSeek API\nAI fix suggestions"]
+        GH["🐙 GitHub API<br>Repo metadata + Git clone"]
+        SQ["📊 SonarQube<br>:9001<br>Static analysis"]
+        AI["🤖 AI Suggestion Router<br>Gemini (active) · DeepSeek/Claude (standby)"]
     end
 
     %% Frontend → all services
@@ -26,8 +26,8 @@ graph TD
     FE -->|"Bearer JWT"| SCS
 
     %% Service-to-service (internal HTTP)
-    PS -->|"GET /api/users/{id}\n(validate token owner)"| LS
-    PS -->|"POST /api/scans/trigger\n(delegate scan job)"| SCS
+    PS -->|"GET /api/users/{id}<br>(validate token owner)"| LS
+    PS -->|"POST /api/scans/trigger<br>(delegate scan job)"| SCS
 
     %% Services → their DBs
     LS --- LDB
@@ -35,10 +35,10 @@ graph TD
     SCS --- SDB
 
     %% External integrations
-    PS -->|"GitHub REST API\n(repo search & metadata)"| GH
+    PS -->|"GitHub REST API<br>(repo search & metadata)"| GH
     SCS -->|"git clone"| GH
-    SCS -->|"sonar-scanner CLI\n+ REST API (poll + fetch issues)"| SQ
-    SCS -->|"POST /chat/completions"| DS
+    SCS -->|"sonar-scanner CLI<br>+ REST API (poll + fetch issues)"| SQ
+    SCS -->|"AI fix-suggestion request"| AI
 
     %% Styling
     style FE fill:#4CAF50,color:#fff
@@ -50,4 +50,4 @@ graph TD
     style SDB fill:#FF9800,color:#fff
     style GH fill:#24292e,color:#fff
     style SQ fill:#9C27B0,color:#fff
-    style DS fill:#333,color:#fff
+    style AI fill:#333,color:#fff

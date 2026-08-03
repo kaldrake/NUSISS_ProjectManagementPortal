@@ -1,4 +1,4 @@
-%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
 flowchart LR
     subgraph "Developer"
         Code[Write Code]
@@ -9,11 +9,11 @@ flowchart LR
 
     subgraph "GitHub Actions: docker-build-push"
 
-        Checkout[Checkout Code<br>actions/checkout@v4]
+        Checkout[Checkout Code\nactions/checkout@v4]
 
         subgraph "AWS Auth"
-            AWSCreds[Configure AWS Credentials<br>Access Key + Secret Key]
-            ECRLogin[Login to Amazon ECR<br>amazon-ecr-login@v2]
+            AWSCreds[Configure AWS Credentials\nAccess Key + Secret Key]
+            ECRLogin[Login to Amazon ECR\namazon-ecr-login@v2]
         end
 
         subgraph "Docker Build × 4"
@@ -42,29 +42,27 @@ frontend-{sha}"]
     end
 
     subgraph "AWS ECR (ap-southeast-1)"
-        ECR[("📦 nusiss_projectmanagementportal 4 image repositories")]
+        ECR[("📦 nusiss_projectmanagementportal
+4 image repositories")]
     end
 
     subgraph "AWS ECS Fargate (ap-southeast-1)"
-        FDeploy["Task Definitions reference*-latest image tags"]
+        FDeploy["Task Definitions reference
+*-latest image tags"]
         F1["login-service task"]
         F2["project-service task"]
         F3["scan-service task"]
         F4["frontend task"]
     end
 
-    subgraph "GitHub Actions: sonarcloud-scan"
-        SonarCI["📊 SonarCloud Scan Single shared project · monorepo (3 backend services + frontend)"]
+    subgraph "Planned (Not Yet Implemented)"
+        Snyk["🚫 Snyk Dependency Scan
+(disabled — token limit)"]
+        SonarCI["🚫 SonarQube CI Analysis
+(not yet wired in pipeline)"]
     end
 
-    subgraph "GitHub Actions: snyk-scan"
-        Snyk["🛡️ Snyk Dependency Scan Matrix: login / project / scan + frontend package.json"]
-    end
-
-    Code --> Commit --> Push 
-    Push --> Snyk
-    Snyk --> SonarCI
-    SonarCI --> Checkout
+    Code --> Commit --> Push --> Checkout
     Checkout --> AWSCreds --> ECRLogin
     ECRLogin --> B1 & B2 & B3 & B4
     B1 --> T1 --> ECR
@@ -94,5 +92,5 @@ frontend-{sha}"]
     style F2 fill:#0ea5e9,color:#fff
     style F3 fill:#0ea5e9,color:#fff
     style F4 fill:#0ea5e9,color:#fff
-    style Snyk fill:#f59e0b,color:#fff
-    style SonarCI fill:#0d9488,color:#fff
+    style Snyk fill:#6b7280,color:#fff
+    style SonarCI fill:#6b7280,color:#fff
