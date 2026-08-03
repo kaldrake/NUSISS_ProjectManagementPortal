@@ -1,4 +1,4 @@
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
 flowchart LR
 
     subgraph "Actors (Personas)"
@@ -26,8 +26,7 @@ flowchart LR
 
         subgraph "Project Management"
             UC4([Create Project])
-            UC5([View Projects
-& Dashboard Summary])
+            UC5([View Projects & Dashboard Summary])
             UC6([Update Project])
             UC7([Delete Project])
         end
@@ -39,8 +38,7 @@ flowchart LR
         end
 
         subgraph "Scan Management"
-            UC11([Trigger Scan
-via SonarQube])
+            UC11([Trigger Scan via SonarQube])
             UC12([View Scan Status])
             UC13([View Scan History])
         end
@@ -48,10 +46,8 @@ via SonarQube])
         subgraph "Vulnerability Management"
             UC14([View Vulnerabilities])
             UC15([View Vulnerability Detail])
-            UC16([Update Vulnerability Status
-Open / In Progress / Resolved / False Positive])
-            UC17([Regenerate AI Fix Suggestion
-DeepSeek API — Blocker/Critical only])
+            UC16([Update Vulnerability Status Open / In Progress / Resolved / False Positive])
+            UC17(["Regenerate AI Fix Suggestion via AI router (Gemini active) — Blocker/Critical only"])
         end
 
     end

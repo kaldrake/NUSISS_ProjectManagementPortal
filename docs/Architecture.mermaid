@@ -1,4 +1,4 @@
-%%{init: {'theme': 'base', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
 graph TB
     subgraph "User/Browser"
         User[👤 User]
@@ -54,8 +54,8 @@ Port: 9001"]
     subgraph "External Services"
         GH["🐙 GitHub
 Repository Hosting"]
-        DS["🤖 DeepSeek API
-AI Fix Suggestions"]
+        AI["🤖 AI Suggestion Router
+Gemini (active) · DeepSeek/Claude (standby)"]
     end
 
     subgraph "AWS (ap-southeast-1)"
@@ -89,7 +89,7 @@ nusiss_projectmanagementportal
     %% External integrations
     PS -->|"GitHub API (repo metadata)"| GH
     SCS -->|"Git Clone (source code)"| GH
-    SCS -->|"REST API (AI suggestions)"| DS
+    SCS -->|"REST API (AI suggestions)"| AI
 
     %% CI/CD pushes images to ECR
     ECR -.->|"docker pull (deployment)"| FE
@@ -109,4 +109,4 @@ nusiss_projectmanagementportal
     style SQ fill:#9C27B0,color:#fff
     style ECR fill:#FF9800,color:#fff
     style GH fill:#24292e,color:#fff
-    style DS fill:#333,color:#fff
+    style AI fill:#333,color:#fff
