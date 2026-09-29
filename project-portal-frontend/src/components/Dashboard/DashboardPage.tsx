@@ -30,17 +30,9 @@ const DashboardPage: React.FC = () => {
       
       // Calculate statistics
       const totalRepos = data.reduce((sum, p) => sum + (p.repositories?.length || 0), 0);
-      const totalVulns = data.reduce((sum, p) => {
-        const projectVulns = p.repositories?.reduce((repoSum, repo) => 
-          repoSum + (repo.vulnerabilityCount || 0), 0) || 0;
-        return sum + projectVulns;
-      }, 0);
-      
-      const criticalVulns = data.reduce((sum, p) => {
-        const projectCritical = p.repositories?.reduce((repoSum, repo) => 
-          repoSum + (repo.criticalCount || 0), 0) || 0;
-        return sum + projectCritical;
-      }, 0);
+      // Project-level counts come from the scan service (latest scan per repository)
+      const totalVulns = data.reduce((sum, p) => sum + (p.vulnerabilityCount || 0), 0);
+      const criticalVulns = data.reduce((sum, p) => sum + (p.criticalCount || 0), 0);
       
       setStats({
         totalProjects: data.length,

@@ -30,6 +30,9 @@ public class ScanService {
     private AiSuggestionRepository aiSuggestionRepository;
     
     @Autowired
+    private ScanSummaryRepository scanSummaryRepository;
+
+    @Autowired
     private SonarQubeScannerService sonarQubeScanner;
     
     @Autowired
@@ -92,10 +95,12 @@ public class ScanService {
                 }
             }
             
+            saveScanSummary(scan.getId(), issues);
+
             scan.setScanStatus(Scan.STATUS_COMPLETED);
             scan.setCompletedAt(LocalDateTime.now());
             scanRepository.save(scan);
-            
+
             log.info("Scan completed. Found {} vulnerabilities", issues.size());
             
             ScanResponseDTO response = new ScanResponseDTO();
@@ -125,6 +130,20 @@ public class ScanService {
         }
     }
     
+    /**
+     * Persist per-severity counts for a finished scan (scan_summary table).
+     */
+    private void saveScanSummary(Long scanId, List<SonarQubeIssue> issues) {
+        ScanSummary summary = scanSummaryRepository.findByScanId(scanId).orElse(new ScanSummary(scanId));
+        summary.setTotalVulnerabilities(issues.size());
+        summary.setBlockerCount((int) issues.stream().filter(i -> "BLOCKER".equals(i.getSeverity())).count());
+        summary.setCriticalCount((int) issues.stream().filter(i -> "CRITICAL".equals(i.getSeverity())).count());
+        summary.setMajorCount((int) issues.stream().filter(i -> "MAJOR".equals(i.getSeverity())).count());
+        summary.setMinorCount((int) issues.stream().filter(i -> "MINOR".equals(i.getSeverity())).count());
+        summary.setInfoCount((int) issues.stream().filter(i -> "INFO".equals(i.getSeverity())).count());
+        scanSummaryRepository.save(summary);
+    }
+
     public ScanStatusDTO getScanStatus(Long scanId) {
         Scan scan = scanRepository.findById(scanId)
             .orElseThrow(() -> new RuntimeException("Scan not found with id: " + scanId));
@@ -157,20 +176,25 @@ public class ScanService {
             dto.setStartedAt(scan.getStartedAt());
             dto.setCompletedAt(scan.getCompletedAt());
             
-            List<Vulnerability> vulns = vulnerabilityRepository.findByScanId(scan.getId());
-            dto.setVulnerabilityCount(vulns.size());
-            
-            long criticalCount = vulns.stream()
-                .filter(v -> isCriticalSeverity(v.getSeverity()))
-                .count();
-            dto.setCriticalCount((int) criticalCount);
-            
+            // Prefer the stored summary; older scans without one fall back to counting rows
+            ScanSummary summary = scanSummaryRepository.findByScanId(scan.getId()).orElse(null);
+            if (summary != null) {
+                dto.setVulnerabilityCount(summary.getTotalVulnerabilities());
+                dto.setCriticalCount(summary.getBlockerCount() + summary.getCriticalCount());
+            } else {
+                List<Vulnerability> vulns = vulnerabilityRepository.findByScanId(scan.getId());
+                dto.setVulnerabilityCount(vulns.size());
+                dto.setCriticalCount((int) vulns.stream()
+                    .filter(v -> isCriticalSeverity(v.getSeverity()))
+                    .count());
+            }
+
             return dto;
         }).collect(Collectors.toList());
     }
     
     public List<VulnerabilityDTO> getVulnerabilitiesForProject(Long projectId) {
-        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findByScanProjectId(projectId);
+        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findLatestByProjectId(projectId);
         return vulnerabilities.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
     
@@ -224,8 +248,8 @@ public class ScanService {
     }
     
     public DashboardSummaryDTO getDashboardSummary(Long projectId) {
-        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findByScanProjectId(projectId);
-        
+        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findLatestByProjectId(projectId);
+
         DashboardSummaryDTO dto = new DashboardSummaryDTO();
         dto.setTotalVulnerabilities(vulnerabilities.size());
         dto.setBlockerCount((int) vulnerabilities.stream().filter(v -> "BLOCKER".equals(v.getSeverity())).count());
@@ -234,7 +258,7 @@ public class ScanService {
         dto.setMinorCount((int) vulnerabilities.stream().filter(v -> "MINOR".equals(v.getSeverity())).count());
         dto.setInfoCount((int) vulnerabilities.stream().filter(v -> "INFO".equals(v.getSeverity())).count());
         
-        scanRepository.findTopByRepositoryIdOrderByStartedAtDesc(1L).ifPresent(scan -> {
+        scanRepository.findTopByProjectIdOrderByStartedAtDesc(projectId).ifPresent(scan -> {
             dto.setLastScanAt(scan.getStartedAt());
             dto.setLastScanStatus(scan.getScanStatus());
         });
