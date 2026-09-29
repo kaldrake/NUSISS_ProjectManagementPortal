@@ -165,9 +165,11 @@ public class ScanServiceClient {
 	}
 
 	/**
-	 * Trigger a new scan POST /api/scans/analyze
+	 * Trigger a new scan POST /api/scans/analyze. Called from an @Async thread, so
+	 * the caller's JWT is passed in rather than read from the (unavailable) request.
 	 */
-	public ScanResponseDTO triggerScan(Long projectId, Long repositoryId, String repositoryUrl, String branch) {
+	public ScanResponseDTO triggerScan(Long projectId, Long repositoryId, String repositoryUrl, String branch,
+			String token) {
 		String url = scanServiceUrl + "/api/scans/analyze";
 
 		try {
@@ -175,7 +177,6 @@ public class ScanServiceClient {
 			headers.setContentType(MediaType.APPLICATION_JSON);
 
 			// Add auth headers
-			String token = getJwtToken();
 			if (token != null) {
 				headers.setBearerAuth(token);
 				log.debug("Added JWT token to scan request");

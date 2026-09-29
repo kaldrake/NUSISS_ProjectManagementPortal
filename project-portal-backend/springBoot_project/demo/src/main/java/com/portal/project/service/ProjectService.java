@@ -10,9 +10,11 @@ import com.portal.project.repository.ProjectRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,17 +39,25 @@ public class ProjectService {
     // =============================================
     
     /**
-     * Get all projects
+     * Load a project and verify that the caller (userId from the JWT) owns it.
+     * 403 if owned by someone else; existing behaviour (RuntimeException) if missing.
      */
-    public List<ProjectResponseDTO> getAllProjects() {
-        log.info("Fetching all projects");
-        
-        List<Project> projects = projectRepository.findAll();
-        return projects.stream()
-            .map(this::convertToDTO)
-            .collect(Collectors.toList());
+    private Project requireOwnedProject(Long projectId, Long userId) {
+        Project project = projectRepository.findById(projectId)
+            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        if (userId == null || !project.getOwnerId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't have access to this project");
+        }
+        return project;
     }
-    
+
+    /**
+     * Verify the caller owns the project (used by the controller before async work starts)
+     */
+    public void assertProjectOwner(Long projectId, Long userId) {
+        requireOwnedProject(projectId, userId);
+    }
+
     /**
      * Get projects by owner ID
      */
@@ -63,13 +73,10 @@ public class ProjectService {
     /**
      * Get project by ID
      */
-    public ProjectResponseDTO getProjectById(Long projectId) {
+    public ProjectResponseDTO getProjectById(Long projectId, Long userId) {
         log.info("Fetching project by ID: {}", projectId);
-        
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
-        return convertToDTO(project);
+
+        return convertToDTO(requireOwnedProject(projectId, userId));
     }
     
     /**
@@ -162,13 +169,11 @@ public class ProjectService {
     /**
      * Get all repositories for a project
      */
-    public List<GitHubRepositoryDTO> getProjectRepositories(Long projectId) {
+    public List<GitHubRepositoryDTO> getProjectRepositories(Long projectId, Long userId) {
         log.info("Fetching repositories for project ID: {}", projectId);
-        
-        // Verify project exists
-        projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        requireOwnedProject(projectId, userId);
+
         List<GitHubRepository> repositories = gitHubRepositoryRepository.findByProjectId(projectId);
         return repositories.stream()
             .map(this::convertToRepositoryDTO)
@@ -179,13 +184,11 @@ public class ProjectService {
      * Add a repository to a project
      */
     @Transactional
-    public GitHubRepositoryDTO addRepository(Long projectId, GitHubRepositoryDTO repositoryDTO) {
+    public GitHubRepositoryDTO addRepository(Long projectId, GitHubRepositoryDTO repositoryDTO, Long userId) {
         log.info("Adding repository '{}' to project ID: {}", repositoryDTO.getRepoFullName(), projectId);
-        
-        // Verify project exists
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        requireOwnedProject(projectId, userId);
+
         // Check if repository already exists in this project
         if (gitHubRepositoryRepository.existsByProjectIdAndGithubRepoId(projectId, repositoryDTO.getGithubRepoId())) {
             throw new RuntimeException("Repository already exists in this project");
@@ -213,9 +216,11 @@ public class ProjectService {
      * Remove a repository from a project
      */
     @Transactional
-    public void removeRepository(Long repositoryId, Long projectId) {
+    public void removeRepository(Long repositoryId, Long projectId, Long userId) {
         log.info("Removing repository ID: {} from project ID: {}", repositoryId, projectId);
-        
+
+        requireOwnedProject(projectId, userId);
+
         GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
             .orElseThrow(() -> new RuntimeException("Repository not found with id: " + repositoryId));
         
@@ -233,10 +238,12 @@ public class ProjectService {
     // =============================================
     
     /**
-     * Trigger a scan for a repository
+     * Trigger a scan for a repository. Runs on an async thread where the incoming
+     * request is no longer available, so the caller's JWT is passed in explicitly.
+     * Ownership must already have been verified via assertProjectOwner.
      */
     @Async
-    public void triggerScan(Long projectId, Long repositoryId) {
+    public void triggerScan(Long projectId, Long repositoryId, String jwtToken) {
         log.info("Triggering scan for project ID: {}, repository ID: {}", projectId, repositoryId);
         
         try {
@@ -254,7 +261,8 @@ public class ProjectService {
                 projectId,
                 repositoryId,
                 repository.getCloneUrl(),
-                repository.getDefaultBranch()
+                repository.getDefaultBranch(),
+                jwtToken
             );
             
             if (scanResponse != null && scanResponse.getScanId() != null) {
@@ -274,13 +282,11 @@ public class ProjectService {
     /**
      * Get dashboard summary for a project (calls Scan Service)
      */
-    public DashboardSummaryDTO getProjectDashboardSummary(Long projectId) {
+    public DashboardSummaryDTO getProjectDashboardSummary(Long projectId, Long userId) {
         log.info("Fetching dashboard summary for project ID: {}", projectId);
-        
-        // Verify project exists
-        projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        requireOwnedProject(projectId, userId);
+
         // Call Scan Service for dashboard summary
         return scanServiceClient.getDashboardSummary(projectId);
     }
