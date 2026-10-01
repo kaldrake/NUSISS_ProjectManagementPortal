@@ -25,7 +25,9 @@ public class JwtUtil {
     }
 
     public Long extractUserId(String token) {
-        return extractAllClaims(token).get("userId", Long.class);
+        // Small ids are deserialized as Integer, so convert any Number
+        Object userId = extractAllClaims(token).get("userId");
+        return (userId instanceof Number) ? ((Number) userId).longValue() : null;
     }
 
     public boolean isTokenValid(String token) {

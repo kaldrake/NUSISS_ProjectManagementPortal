@@ -7,6 +7,7 @@ import com.portal.project.dto.ProjectCreateDTO;
 import com.portal.project.dto.ProjectResponseDTO;
 import com.portal.project.dto.ProjectUpdateDTO;
 import com.portal.project.dto.DashboardSummaryDTO;
+import com.portal.project.security.JwtAuthenticationFilter;
 import com.portal.project.service.ProjectService;
 
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -32,23 +34,31 @@ public class ProjectController {
     // =============================================
     // PROJECT CRUD ENDPOINTS
     // =============================================
+    // The caller's userId comes from the verified JWT (set by JwtAuthenticationFilter),
+    // never from a client-supplied header, so users only ever see their own projects.
 
     /**
-     * GET /api/projects - Get all projects
+     * GET /api/projects - Get the current user's projects
      */
     @GetMapping
-    public ResponseEntity<List<ProjectResponseDTO>> getAllProjects() {
-        log.info("GET /api/projects - Fetching all projects");
-        List<ProjectResponseDTO> projects = projectService.getAllProjects();
+    public ResponseEntity<List<ProjectResponseDTO>> getMyProjects(
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
+        log.info("GET /api/projects - Fetching projects for user: {}", userId);
+        List<ProjectResponseDTO> projects = projectService.getProjectsByOwner(userId);
         return ResponseEntity.ok(projects);
     }
 
     /**
-     * GET /api/projects?ownerId=123 - Get projects by owner
+     * GET /api/projects?ownerId=123 - Get projects by owner (own projects only)
      */
     @GetMapping(params = "ownerId")
-    public ResponseEntity<List<ProjectResponseDTO>> getProjectsByOwner(@RequestParam Long ownerId) {
+    public ResponseEntity<List<ProjectResponseDTO>> getProjectsByOwner(
+            @RequestParam Long ownerId,
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
         log.info("GET /api/projects?ownerId={} - Fetching projects by owner", ownerId);
+        if (!ownerId.equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only list your own projects");
+        }
         List<ProjectResponseDTO> projects = projectService.getProjectsByOwner(ownerId);
         return ResponseEntity.ok(projects);
     }
@@ -57,9 +67,11 @@ public class ProjectController {
      * GET /api/projects/{id} - Get single project by ID
      */
     @GetMapping("/{id}")
-    public ResponseEntity<ProjectResponseDTO> getProjectById(@PathVariable Long id) {
+    public ResponseEntity<ProjectResponseDTO> getProjectById(
+            @PathVariable Long id,
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
         log.info("GET /api/projects/{} - Fetching project by ID", id);
-        ProjectResponseDTO project = projectService.getProjectById(id);
+        ProjectResponseDTO project = projectService.getProjectById(id, userId);
         return ResponseEntity.ok(project);
     }
 
@@ -69,11 +81,10 @@ public class ProjectController {
     @PostMapping
     public ResponseEntity<ProjectResponseDTO> createProject(
             @Valid @RequestBody ProjectCreateDTO createDTO,
-            @RequestHeader(value = "X-User-Id", required = false) Long ownerId) {
-        
-        log.info("POST /api/projects - Creating project '{}' for user: {}", createDTO.getName(), ownerId);
-        Long effectiveOwnerId = (ownerId != null) ? ownerId : 1L;
-        ProjectResponseDTO newProject = projectService.createProject(createDTO, effectiveOwnerId);
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
+
+        log.info("POST /api/projects - Creating project '{}' for user: {}", createDTO.getName(), userId);
+        ProjectResponseDTO newProject = projectService.createProject(createDTO, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(newProject);
     }
 
@@ -84,11 +95,10 @@ public class ProjectController {
     public ResponseEntity<ProjectResponseDTO> updateProject(
             @PathVariable Long id,
             @Valid @RequestBody ProjectUpdateDTO updateDTO,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId) {
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
 
         log.info("PUT /api/projects/{} - Updating project for user: {}", id, userId);
-        Long ownerId = (userId != null) ? userId : 1L;
-        ProjectResponseDTO updatedProject = projectService.updateProject(id, updateDTO, ownerId);
+        ProjectResponseDTO updatedProject = projectService.updateProject(id, updateDTO, userId);
         return ResponseEntity.ok(updatedProject);
     }
 
@@ -98,11 +108,10 @@ public class ProjectController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProject(
             @PathVariable Long id,
-            @RequestHeader(value = "X-User-Id", required = false) Long ownerId) {
-        
-        log.info("DELETE /api/projects/{} - Deleting project for user: {}", id, ownerId);
-        Long effectiveOwnerId = (ownerId != null) ? ownerId : 1L;
-        projectService.deleteProject(id, effectiveOwnerId);
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
+
+        log.info("DELETE /api/projects/{} - Deleting project for user: {}", id, userId);
+        projectService.deleteProject(id, userId);
         return ResponseEntity.noContent().build();
     }
 
@@ -114,9 +123,11 @@ public class ProjectController {
      * GET /api/projects/{projectId}/repositories - Get all repositories for a project
      */
     @GetMapping("/{projectId}/repositories")
-    public ResponseEntity<List<GitHubRepositoryDTO>> getProjectRepositories(@PathVariable Long projectId) {
+    public ResponseEntity<List<GitHubRepositoryDTO>> getProjectRepositories(
+            @PathVariable Long projectId,
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
         log.info("GET /api/projects/{}/repositories - Fetching repositories", projectId);
-        List<GitHubRepositoryDTO> repositories = projectService.getProjectRepositories(projectId);
+        List<GitHubRepositoryDTO> repositories = projectService.getProjectRepositories(projectId, userId);
         return ResponseEntity.ok(repositories);
     }
 
@@ -127,10 +138,10 @@ public class ProjectController {
     public ResponseEntity<GitHubRepositoryDTO> addRepository(
             @PathVariable Long projectId,
             @Valid @RequestBody GitHubRepositoryDTO repositoryDTO,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId) {
-        
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
+
         log.info("POST /api/projects/{}/repositories - Adding repository: {}", projectId, repositoryDTO.getRepoFullName());
-        GitHubRepositoryDTO newRepository = projectService.addRepository(projectId, repositoryDTO);
+        GitHubRepositoryDTO newRepository = projectService.addRepository(projectId, repositoryDTO, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(newRepository);
     }
 
@@ -141,10 +152,10 @@ public class ProjectController {
     public ResponseEntity<Void> removeRepository(
             @PathVariable Long projectId,
             @PathVariable Long repositoryId,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId) {
-        
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
+
         log.info("DELETE /api/projects/{}/repositories/{} - Removing repository", projectId, repositoryId);
-        projectService.removeRepository(repositoryId, projectId);
+        projectService.removeRepository(repositoryId, projectId, userId);
         return ResponseEntity.noContent().build();
     }
 
@@ -159,10 +170,12 @@ public class ProjectController {
     public ResponseEntity<Void> triggerScan(
             @PathVariable Long projectId,
             @PathVariable Long repositoryId,
-            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
         log.info("POST /api/projects/{}/repositories/{}/scan - Triggering scan", projectId, repositoryId);
+        // Checked here because triggerScan runs asynchronously and cannot return an error status
+        projectService.getOwnedProject(projectId, userId);
         String token = (authHeader != null && authHeader.startsWith("Bearer ")) ? authHeader.substring(7) : null;
         projectService.triggerScan(projectId, repositoryId, token);
         return ResponseEntity.accepted().build();
@@ -176,9 +189,11 @@ public class ProjectController {
      * GET /api/projects/{projectId}/dashboard - Get dashboard summary for a project
      */
     @GetMapping("/{projectId}/dashboard")
-    public ResponseEntity<DashboardSummaryDTO> getDashboardSummary(@PathVariable Long projectId) {
+    public ResponseEntity<DashboardSummaryDTO> getDashboardSummary(
+            @PathVariable Long projectId,
+            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
         log.info("GET /api/projects/{}/dashboard - Fetching dashboard summary", projectId);
-        DashboardSummaryDTO summary = projectService.getProjectDashboardSummary(projectId);
+        DashboardSummaryDTO summary = projectService.getProjectDashboardSummary(projectId, userId);
         return ResponseEntity.ok(summary);
     }
 }

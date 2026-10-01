@@ -10,9 +10,11 @@ import com.portal.project.repository.ProjectRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -37,17 +39,16 @@ public class ProjectService {
     // =============================================
     
     /**
-     * Get all projects
+     * Load a project owned by the given user. Projects of other users are
+     * reported as not found, so their existence is not revealed.
      */
-    public List<ProjectResponseDTO> getAllProjects() {
-        log.info("Fetching all projects");
-        
-        List<Project> projects = projectRepository.findAll();
-        return projects.stream()
-            .map(this::convertToDTO)
-            .collect(Collectors.toList());
+    public Project getOwnedProject(Long projectId, Long userId) {
+        return projectRepository.findById(projectId)
+            .filter(project -> project.getOwnerId().equals(userId))
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Project not found with id: " + projectId));
     }
-    
+
     /**
      * Get projects by owner ID
      */
@@ -63,12 +64,11 @@ public class ProjectService {
     /**
      * Get project by ID
      */
-    public ProjectResponseDTO getProjectById(Long projectId) {
+    public ProjectResponseDTO getProjectById(Long projectId, Long userId) {
         log.info("Fetching project by ID: {}", projectId);
-        
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        Project project = getOwnedProject(projectId, userId);
+
         return convertToDTO(project);
     }
     
@@ -102,15 +102,9 @@ public class ProjectService {
     @Transactional
     public ProjectResponseDTO updateProject(Long projectId, ProjectUpdateDTO updateDTO, Long ownerId) {
         log.info("Updating project ID: {} for owner: {}", projectId, ownerId);
-        
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
-        // Verify ownership
-        if (!project.getOwnerId().equals(ownerId)) {
-            throw new RuntimeException("You don't have permission to update this project");
-        }
-        
+
+        Project project = getOwnedProject(projectId, ownerId);
+
         if (updateDTO.getName() != null && !updateDTO.getName().isEmpty()) {
             // Check if new name conflicts with existing project
             if (!updateDTO.getName().equals(project.getName()) &&
@@ -138,15 +132,9 @@ public class ProjectService {
     @Transactional
     public void deleteProject(Long projectId, Long ownerId) {
         log.info("Deleting project ID: {} for owner: {}", projectId, ownerId);
-        
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
-        // Verify ownership
-        if (!project.getOwnerId().equals(ownerId)) {
-            throw new RuntimeException("You don't have permission to delete this project");
-        }
-        
+
+        Project project = getOwnedProject(projectId, ownerId);
+
         // Delete associated repositories first (cascade should handle, but explicit for safety)
         gitHubRepositoryRepository.deleteByProjectId(projectId);
         
@@ -162,13 +150,11 @@ public class ProjectService {
     /**
      * Get all repositories for a project
      */
-    public List<GitHubRepositoryDTO> getProjectRepositories(Long projectId) {
+    public List<GitHubRepositoryDTO> getProjectRepositories(Long projectId, Long userId) {
         log.info("Fetching repositories for project ID: {}", projectId);
-        
-        // Verify project exists
-        projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        getOwnedProject(projectId, userId);
+
         List<GitHubRepository> repositories = gitHubRepositoryRepository.findByProjectId(projectId);
         return repositories.stream()
             .map(this::convertToRepositoryDTO)
@@ -179,13 +165,11 @@ public class ProjectService {
      * Add a repository to a project
      */
     @Transactional
-    public GitHubRepositoryDTO addRepository(Long projectId, GitHubRepositoryDTO repositoryDTO) {
+    public GitHubRepositoryDTO addRepository(Long projectId, GitHubRepositoryDTO repositoryDTO, Long userId) {
         log.info("Adding repository '{}' to project ID: {}", repositoryDTO.getRepoFullName(), projectId);
-        
-        // Verify project exists
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        getOwnedProject(projectId, userId);
+
         // Check if repository already exists in this project
         if (gitHubRepositoryRepository.existsByProjectIdAndGithubRepoId(projectId, repositoryDTO.getGithubRepoId())) {
             throw new RuntimeException("Repository already exists in this project");
@@ -213,9 +197,11 @@ public class ProjectService {
      * Remove a repository from a project
      */
     @Transactional
-    public void removeRepository(Long repositoryId, Long projectId) {
+    public void removeRepository(Long repositoryId, Long projectId, Long userId) {
         log.info("Removing repository ID: {} from project ID: {}", repositoryId, projectId);
-        
+
+        getOwnedProject(projectId, userId);
+
         GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
             .orElseThrow(() -> new RuntimeException("Repository not found with id: " + repositoryId));
         
@@ -273,13 +259,11 @@ public class ProjectService {
     /**
      * Get dashboard summary for a project (calls Scan Service)
      */
-    public DashboardSummaryDTO getProjectDashboardSummary(Long projectId) {
+    public DashboardSummaryDTO getProjectDashboardSummary(Long projectId, Long userId) {
         log.info("Fetching dashboard summary for project ID: {}", projectId);
-        
-        // Verify project exists
-        projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
-        
+
+        getOwnedProject(projectId, userId);
+
         // Call Scan Service for dashboard summary
         return scanServiceClient.getDashboardSummary(projectId);
     }

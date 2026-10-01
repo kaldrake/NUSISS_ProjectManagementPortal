@@ -18,6 +18,9 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /** Request attribute holding the caller's user id, taken from the verified JWT. */
+    public static final String USER_ID_ATTRIBUTE = "userId";
+
     @Autowired private JwtUtil jwtUtil;
 
     @Override
@@ -33,11 +36,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = authHeader.substring(7);
             if (jwtUtil.isTokenValid(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
                 String username = jwtUtil.extractUsername(token);
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                username, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                Long userId = jwtUtil.extractUserId(token);
+                if (userId != null) {
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    username, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    request.setAttribute(USER_ID_ATTRIBUTE, userId);
+                }
             }
         } catch (Exception ignored) {}
         filterChain.doFilter(request, response);

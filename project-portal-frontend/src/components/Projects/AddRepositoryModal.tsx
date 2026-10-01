@@ -27,7 +27,8 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
   existingRepos,
 }) => {
   const [repoUrl, setRepoUrl] = useState('');
-  const [repoBranch, setRepoBranch] = useState('master');
+  // Empty = use the repository's actual default branch reported by GitHub
+  const [repoBranch, setRepoBranch] = useState('');
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [repoValid, setRepoValid] = useState(false);
@@ -102,7 +103,7 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
         repoName: repoInfo.name,
         repoUrl: repoUrl,
         cloneUrl: repoInfo.cloneUrl,
-        defaultBranch: repoBranch || repoInfo.defaultBranch,
+        defaultBranch: repoBranch.trim() || repoInfo.defaultBranch,
       });
       
       toast.success('Repository added successfully');
@@ -111,7 +112,7 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
       
       // Reset form
       setRepoUrl('');
-      setRepoBranch('main');
+      setRepoBranch('');
       setRepoValid(false);
       setRepoInfo(null);
       
@@ -180,10 +181,12 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
                   value={repoBranch}
                   onChange={(e) => setRepoBranch(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="main"
+                  placeholder={repoInfo?.defaultBranch || 'main'}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Default: {repoInfo?.defaultBranch || 'master'}
+                  {repoInfo
+                    ? `Leave empty to use the default branch: ${repoInfo.defaultBranch}`
+                    : 'Leave empty to use the repository\'s default branch'}
                 </p>
               </div>
             </div>
