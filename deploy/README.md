@@ -33,7 +33,7 @@ services (internal), MySQL (login_db, project_db, scan_db), SonarQube (:9001, yo
    | `EC2_SSH_KEY` | full contents of `project-portal-key.pem` |
    | `AWS_ACCESS_KEY_ID_JWT_BRANCH` / `AWS_SECRET_ACCESS_KEY_JWT_BRANCH` | existing IAM user; needs ECR push |
 
-4. **Push** to `main` or `add-JWT-config` → the pipeline builds, pushes and deploys.
+4. **Push** to `add-JWT-config` → the pipeline builds, pushes and deploys.
 
 5. **SonarQube token** — open `http://<ip>:9001` (admin/admin, change password), create a token under
    My Account → Security, put it in `SONAR_TOKEN` in `.env`, then on the EC2:
