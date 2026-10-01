@@ -1,0 +1,28 @@
+# EC2 #4 "scan": scan-service on :8083 (reachable from the web and project EC2s only).
+# Runs sonar-scanner against SonarQube on the web EC2 at SONAR_HOST_URL.
+# CI copies this file to /opt/portal/docker-compose.prod.yml; secrets come from /opt/portal/.env.
+
+name: portal
+
+services:
+  scan-service:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY:-nusiss_projectmanagementportal}:scan-${IMAGE_TAG:-latest}
+    container_name: portal-scan-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      - SERVER_PORT=8083
+      - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST:?Set DB_HOST in .env}:3306/scan_db?sslMode=REQUIRED&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=scan_user
+      - SPRING_DATASOURCE_PASSWORD=${SCAN_DB_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=false
+      - SONAR_HOST_URL=${SONAR_HOST_URL:?Set SONAR_HOST_URL (http://web private IP:9001) in .env}
+      - SONAR_TOKEN=${SONAR_TOKEN:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      # Also applies to the sonar-scanner CLI JVM launched inside this container
+      - JAVA_TOOL_OPTIONS=-Xmx1g

@@ -1,0 +1,24 @@
+# EC2 #3 "project": project-service on :8082 (reachable from the web EC2 only).
+# Calls the scan EC2 at SCAN_SERVICE_URL.
+# CI copies this file to /opt/portal/docker-compose.prod.yml; secrets come from /opt/portal/.env.
+
+name: portal
+
+services:
+  project-service:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY:-nusiss_projectmanagementportal}:project-${IMAGE_TAG:-latest}
+    container_name: portal-project-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      - SERVER_PORT=8082
+      - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST:?Set DB_HOST in .env}:3306/project_db?sslMode=REQUIRED&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=project_user
+      - SPRING_DATASOURCE_PASSWORD=${PROJECT_DB_PASSWORD}
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=false
+      - SCAN_SERVICE_URL=${SCAN_SERVICE_URL:?Set SCAN_SERVICE_URL (http://scan private IP:8083) in .env}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      - JAVA_TOOL_OPTIONS=-Xmx768m

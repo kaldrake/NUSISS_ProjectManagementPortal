@@ -290,57 +290,130 @@ jobs:
           echo "Project Service: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:project-${{ github.sha }}"
           echo "Scan Service: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-${{ github.sha }}"
           echo "Frontend: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:frontend-${{ github.sha }}"
-
   # =============================================
-  # DEPLOY TO EC2 DOCKER HOST
+  # DEPLOY: 3 backend EC2s first (reached through the web EC2 as SSH jump host),
+  # then the web EC2 (frontend/Nginx + SonarQube). If a backend fails, the web
+  # EC2 is left untouched.
   # =============================================
-  deploy-ec2:
-    name: Deploy to EC2
+  deploy-backends:
+    name: Deploy ${{ matrix.role }} EC2
     runs-on: ubuntu-latest
     needs: docker-build-push
     if: github.event_name == 'push' && github.ref == 'refs/heads/add-JWT-config'
     concurrency:
-      group: deploy-ec2
+      group: deploy-${{ matrix.role }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - role: login
+            host_secret: LOGIN_HOST
+            service: login-service
+            health: wget -qO- http://localhost:8081/health
+          - role: project
+            host_secret: PROJECT_HOST
+            service: project-service
+            health: wget -qO- http://localhost:8082/health
+          - role: scan
+            host_secret: SCAN_HOST
+            service: scan-service
+            health: curl -fs http://localhost:8083/health
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH (jump through the web EC2)
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host web
+            HostName ${{ secrets.EC2_HOST }}
+            User ec2-user
+            IdentityFile ~/.ssh/ec2.pem
+          Host target
+            HostName ${{ secrets[matrix.host_secret] }}
+            User ec2-user
+            IdentityFile ~/.ssh/ec2.pem
+            ProxyJump web
+            StrictHostKeyChecking accept-new
+          EOF
+
+      - name: Copy deployment files
+        run: |
+          scp deploy/hosts/${{ matrix.role }}.yml target:/opt/portal/docker-compose.prod.yml
+          scp deploy/scripts/deploy.sh target:/opt/portal/deploy.sh
+
+      - name: Pull image and restart
+        run: ssh target "chmod +x /opt/portal/deploy.sh && /opt/portal/deploy.sh ${{ github.sha }}"
+
+      - name: Health check
+        run: |
+          ssh target 'bash -s' <<'EOF'
+          cd /opt/portal
+          for i in $(seq 1 30); do
+            if docker compose -f docker-compose.prod.yml exec -T ${{ matrix.service }} sh -c "${{ matrix.health }}" >/dev/null 2>&1; then
+              echo "OK   ${{ matrix.service }}"; exit 0
+            fi
+            sleep 10
+          done
+          echo "FAIL ${{ matrix.service }}"; docker compose -f docker-compose.prod.yml logs --tail 50 ${{ matrix.service }}; exit 1
+          EOF
+
+  deploy-web:
+    name: Deploy web EC2
+    runs-on: ubuntu-latest
+    needs: deploy-backends
+    if: github.event_name == 'push' && github.ref == 'refs/heads/add-JWT-config'
+    concurrency:
+      group: deploy-web
       cancel-in-progress: false
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up SSH key
+      - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
           chmod 600 ~/.ssh/ec2.pem
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host web
+            HostName ${{ secrets.EC2_HOST }}
+            User ec2-user
+            IdentityFile ~/.ssh/ec2.pem
+          EOF
 
-      - name: Copy deployment files to EC2
+      - name: Copy deployment files
         run: |
-          scp -i ~/.ssh/ec2.pem \
-            deploy/docker-compose.prod.yml deploy/scripts/deploy.sh deploy/scripts/init-rds.sh \
-            ec2-user@${{ secrets.EC2_HOST }}:/opt/portal/
+          scp deploy/hosts/web.yml web:/opt/portal/docker-compose.prod.yml
+          scp deploy/scripts/deploy.sh web:/opt/portal/deploy.sh
 
       - name: Pull images and restart stack
-        run: |
-          ssh -i ~/.ssh/ec2.pem ec2-user@${{ secrets.EC2_HOST }} \
-            "chmod +x /opt/portal/deploy.sh /opt/portal/init-rds.sh && /opt/portal/deploy.sh ${{ github.sha }}"
+        run: ssh web "chmod +x /opt/portal/deploy.sh && /opt/portal/deploy.sh ${{ github.sha }}"
 
       - name: Health check
         run: |
-          ssh -i ~/.ssh/ec2.pem ec2-user@${{ secrets.EC2_HOST }} 'bash -s' <<'EOF'
+          ssh web 'bash -s' <<'EOF'
           set -e
           cd /opt/portal
-          check() {
+          wait_for() {
             for i in $(seq 1 30); do
-              if docker compose -f docker-compose.prod.yml exec -T "$1" sh -c "$2" >/dev/null 2>&1; then
-                echo "OK   $1"; return 0
-              fi
+              if eval "$2" >/dev/null 2>&1; then echo "OK   $1"; return 0; fi
               sleep 10
             done
-            echo "FAIL $1"; docker compose -f docker-compose.prod.yml logs --tail 50 "$1"; return 1
+            echo "FAIL $1"; return 1
           }
-          check login-service   "wget -qO- http://localhost:8081/health"
-          check project-service "wget -qO- http://localhost:8082/health"
-          check scan-service    "curl -fs http://localhost:8083/health"
-          check frontend        "wget -qO- http://localhost/"
+          wait_for frontend "docker compose -f docker-compose.prod.yml exec -T frontend wget -qO- http://localhost/"
+          # The web EC2 must reach each backend EC2 (security groups + private IPs in .env)
+          for var in LOGIN_UPSTREAM PROJECT_UPSTREAM SCAN_UPSTREAM; do
+            upstream="$(grep -E "^${var}=" .env | tail -1 | cut -d= -f2-)"
+            wait_for "$var ($upstream)" "curl -fs http://$upstream/health"
+          done
           EOF

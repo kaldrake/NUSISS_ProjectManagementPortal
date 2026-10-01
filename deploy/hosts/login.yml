@@ -1,0 +1,23 @@
+# EC2 #2 "login": login-service on :8081 (reachable from the web EC2 only).
+# CI copies this file to /opt/portal/docker-compose.prod.yml; secrets come from /opt/portal/.env.
+
+name: portal
+
+services:
+  login-service:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY:-nusiss_projectmanagementportal}:login-${IMAGE_TAG:-latest}
+    container_name: portal-login-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_PORT=8081
+      - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST:?Set DB_HOST in .env}:3306/login_db?sslMode=REQUIRED&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=login_user
+      - SPRING_DATASOURCE_PASSWORD=${LOGIN_DB_PASSWORD}
+      # Creates tables on an empty database; no separate DDL step needed
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_JPA_SHOW_SQL=false
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
+      - JAVA_TOOL_OPTIONS=-Xmx768m

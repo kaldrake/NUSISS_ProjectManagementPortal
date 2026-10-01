@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 if [ ! -f .env ]; then
-  echo "ERROR: $(pwd)/.env not found - create it from .env.example first" >&2
+  echo "ERROR: $(pwd)/.env not found - create it from deploy/hosts/<role>.env.example first" >&2
   exit 1
 fi
 
