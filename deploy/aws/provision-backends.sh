@@ -102,7 +102,7 @@ for role in login project scan; do
 done
 cat <<EOF
 
-GitHub secrets to add (private IPs above):
+GitHub secrets (or use DNS names after running provision-dns.sh):
   LOGIN_HOST   = <login PRIVATE_IP>
   PROJECT_HOST = <project PRIVATE_IP>
   SCAN_HOST    = <scan PRIVATE_IP>

@@ -14,8 +14,12 @@ push → GitHub Actions: build 4 images → ECR (nusiss_projectmanagementportal)
 | #4 scan | scan-service :8083 | web and project EC2s |
 
 `login_db`, `project_db` and `scan_db` live on one **Amazon RDS MySQL 8.4** instance that only the
-backend EC2s can reach (TLS required). Services find each other by **private IP**, set in each EC2's
+backend EC2s can reach (TLS required). Services find each other by **Route 53 private DNS names**
+(`web` / `login` / `project` / `scan` `.portal.internal`, visible only inside the VPC), set in each EC2's
 `/opt/portal/.env`. CI copies `hosts/<role>.yml` to `/opt/portal/docker-compose.prod.yml` on each EC2.
+
+**Replacing an EC2:** after launching the new instance, re-run `bash provision-dns.sh` in CloudShell.
+It points the name at the new private IP; no `.env` or GitHub secret changes are needed.
 
 ## One-time setup
 
@@ -24,6 +28,7 @@ backend EC2s can reach (TLS required). Services find each other by **private IP*
    MY_IP=<your-public-ip>/32 bash provision.sh            # web EC2, ECR, IAM role, key pair
    bash provision-rds.sh                                  # RDS MySQL
    MY_IP=<your-public-ip>/32 bash provision-backends.sh   # login / project / scan EC2s
+   bash provision-dns.sh                                  # *.portal.internal private DNS names
    ```
    Defaults: web `t3.large`, login/project `t3.small`, scan `t3.medium`, RDS `db.t4g.micro`.
 
@@ -43,7 +48,7 @@ backend EC2s can reach (TLS required). Services find each other by **private IP*
    |---|---|
    | `EC2_HOST` | web EC2 Elastic IP |
    | `EC2_SSH_KEY` | full contents of `project-portal-key.pem` (same key for all EC2s) |
-   | `LOGIN_HOST` / `PROJECT_HOST` / `SCAN_HOST` | **private** IPs of the backend EC2s |
+   | `LOGIN_HOST` / `PROJECT_HOST` / `SCAN_HOST` | `login.portal.internal` / `project.portal.internal` / `scan.portal.internal` |
    | `AWS_ACCESS_KEY_ID_JWT_BRANCH` / `AWS_SECRET_ACCESS_KEY_JWT_BRANCH` | IAM user with ECR push |
 
 5. **Push** to `add-JWT-config` → build, then backends, then web.

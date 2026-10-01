@@ -18,7 +18,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${PROJECT_DB_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_JPA_SHOW_SQL=false
-      - SCAN_SERVICE_URL=${SCAN_SERVICE_URL:?Set SCAN_SERVICE_URL (http://scan private IP:8083) in .env}
+      - SCAN_SERVICE_URL=${SCAN_SERVICE_URL:?Set SCAN_SERVICE_URL (e.g. http://scan.portal.internal:8083) in .env}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
       - JAVA_TOOL_OPTIONS=-Xmx768m

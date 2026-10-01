@@ -18,7 +18,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${SCAN_DB_PASSWORD}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_JPA_SHOW_SQL=false
-      - SONAR_HOST_URL=${SONAR_HOST_URL:?Set SONAR_HOST_URL (http://web private IP:9001) in .env}
+      - SONAR_HOST_URL=${SONAR_HOST_URL:?Set SONAR_HOST_URL (e.g. http://web.portal.internal:9001) in .env}
       - SONAR_TOKEN=${SONAR_TOKEN:-}
       # AI fix suggestions: gemini (default), deepseek or claude
       - AI_PROVIDER=${AI_PROVIDER:-gemini}
