@@ -70,21 +70,6 @@ const LoginPage: React.FC = () => {
         }
     };
 
-    const handleBypassLogin = () => {
-        const mockUser = {
-            id: 1,
-            username: 'testuser',
-            email: 'test@example.com',
-            role: 'ADMIN'
-        };
-        const mockToken = 'mock-jwt-token-for-testing';
-        
-        authService.setToken(mockToken);
-        authService.setUser(mockUser);
-        toast.success('Bypass login successful! (Testing mode)');
-        navigate('/dashboard');
-    };
-
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
             <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
@@ -208,21 +193,6 @@ const LoginPage: React.FC = () => {
                     </form>
                 )}
 
-                {/* Bypass Button for Testing */}
-                <div className="mt-4">
-                    <button
-                        onClick={handleBypassLogin}
-                        className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-lg transition"
-                    >
-                        🧪 Bypass Login (Testing Only)
-                    </button>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-gray-200">
-                    <p className="text-xs text-center text-gray-400">
-                        Demo credentials: username: "testuser" / password: "test123"
-                    </p>
-                </div>
             </div>
         </div>
     );

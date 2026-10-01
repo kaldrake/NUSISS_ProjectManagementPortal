@@ -289,7 +289,7 @@ class AuthControllerTest {
         User user = new User();
         user.setUsername(username);
         user.setEmail(email);
-        user.setPassword(passwordEncoder.encode("password123"));
+        user.setPasswordHash(passwordEncoder.encode("password123"));
         user.setRole("DEVELOPER");
         userRepository.save(user);
     }

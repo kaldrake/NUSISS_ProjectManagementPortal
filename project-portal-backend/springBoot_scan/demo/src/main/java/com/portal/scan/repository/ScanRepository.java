@@ -23,6 +23,8 @@ public interface ScanRepository extends JpaRepository<Scan, Long> {
     List<Scan> findByRepositoryIdOrderByStartedAtDesc(Long repositoryId);
     
     Optional<Scan> findTopByRepositoryIdOrderByStartedAtDesc(Long repositoryId);
+
+    Optional<Scan> findTopByProjectIdOrderByStartedAtDesc(Long projectId);
     
     List<Scan> findByScanStatus(String scanStatus);
     

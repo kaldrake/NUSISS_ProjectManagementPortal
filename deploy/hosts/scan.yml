@@ -20,7 +20,11 @@ services:
       - SPRING_JPA_SHOW_SQL=false
       - SONAR_HOST_URL=${SONAR_HOST_URL:?Set SONAR_HOST_URL (http://web private IP:9001) in .env}
       - SONAR_TOKEN=${SONAR_TOKEN:-}
+      # AI fix suggestions: gemini (default), deepseek or claude
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}

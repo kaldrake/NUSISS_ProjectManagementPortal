@@ -25,3 +25,20 @@ replay_pid*
 
 # Deployment secrets
 deploy/.env
+# Secret files (IMPORTANT!)
+*.p12
+*.pfx
+*.jks
+*.key
+*.pem
+*.crt
+*.secret
+application-secret.properties
+secrets.yml
+.env
+*.env
+.env.local
+.env.*.local
+.env.ec2
+.env.*ec2
+.vscode*

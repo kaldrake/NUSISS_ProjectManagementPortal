@@ -12,18 +12,6 @@ export const useAuth = () => {
     const checkAuth = async () => {
       const token = authService.getToken();
       
-      // Check for mock token (bypass login)
-      if (token === 'mock-jwt-token-for-testing') {
-        const mockUser = authService.getUser();
-        if (mockUser) {
-          setIsAuthenticated(true);
-          setUser(mockUser);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // Normal authentication
       if (token) {
         // For now, just check if token exists
         // In production, you'd validate with backend
