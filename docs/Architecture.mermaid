@@ -4,94 +4,83 @@ graph TB
         User[👤 User]
     end
 
-    subgraph "Local / EC2 Docker Host"
+    subgraph "AWS (ap-southeast-2) · Default VPC"
 
-        subgraph "Docker Network: portal-network"
-
-            subgraph "Frontend Layer"
-                FE["🌐 Frontend
+        subgraph "EC2 #1 web · t3.large · Elastic IP"
+            FE["🌐 Frontend + Reverse Proxy
 React + TypeScript (Nginx)
-Port: 3000"]
-            end
-
-            subgraph "Backend Services Layer"
-                LS["🔐 Login Service
-Spring Boot 3.5 (Java 17)
-Port: 8081"]
-                PS["📁 Project Service
-Spring Boot 3.5 (Java 17)
-Port: 8082"]
-                SCS["🔍 Scan Service
-Spring Boot 3.5 (Java 17)
-Port: 8083"]
-            end
-
-            subgraph "Database Layer"
-                LDB[("🗄️ login_db
-MySQL 8.0
-Port: 3306")]
-                PDB[("🗄️ project_db
-MySQL 8.0
-Port: 3306")]
-                SDB[("🗄️ scan_db
-MySQL 8.0
-Port: 3306")]
-            end
-
-            subgraph "SonarQube Stack"
-                SQDB[("🐘 sonarqube_db
-PostgreSQL 13
-Port: 5432")]
-                SQ["📊 SonarQube Server
+Port: 80 (public)
+/api/* → backend EC2s"]
+            SQ["📊 SonarQube Server
 v9.9.5 LTS (Community)
 Port: 9001"]
-            end
-
+            SQDB[("🐘 sonarqube_db
+PostgreSQL 13
+Port: 5432 (Docker network only)")]
         end
 
-    end
+        subgraph "Backend EC2s · project-portal-backend-sg"
+            LS["🔐 Login Service
+EC2 #2 · t3.small
+Spring Boot 3.5 (Java 17)
+Port: 8081"]
+            PS["📁 Project Service
+EC2 #3 · t3.small
+Spring Boot 3.5 (Java 17)
+Port: 8082"]
+            SCS["🔍 Scan Service
+EC2 #4 · t3.medium
+Spring Boot 3.5 (Java 17) + sonar-scanner
+Port: 8083"]
+        end
 
-    subgraph "External Services"
-        GH["🐙 GitHub
-Repository Hosting"]
-        AI["🤖 AI Suggestion Router
-Gemini (active) · DeepSeek/Claude (standby)"]
-    end
+        subgraph "Amazon RDS · MySQL 8.4 · db.t4g.micro (private, TLS)"
+            LDB[("🗄️ login_db
+users · sessions")]
+            PDB[("🗄️ project_db
+projects · repositories")]
+            SDB[("🗄️ scan_db
+scans · vulnerabilities · ai_suggestions")]
+        end
 
-    subgraph "AWS (ap-southeast-1)"
         ECR["📦 Amazon ECR
 nusiss_projectmanagementportal
 4 images: login / project / scan / frontend"]
     end
 
+    subgraph "External Services"
+        GH["🐙 GitHub
+Repository Hosting"]
+        AI["🤖 AI Suggestion Router (AI_PROVIDER)
+DeepSeek (active) · Gemini / Claude (configurable)"]
+    end
+
     %% User to Frontend
-    User -->|"HTTP :3000"| FE
+    User -->|"HTTP :80"| FE
 
-    %% Frontend to Backend
-    FE -->|"REST API :8081"| LS
-    FE -->|"REST API :8082"| PS
-    FE -->|"REST API :8083"| SCS
+    %% Nginx reverse proxy to backend EC2s (private IPs)
+    FE -->|"/api/auth, /api/login → :8081"| LS
+    FE -->|"/api/projects → :8082"| PS
+    FE -->|"/api/scans, /api/github → :8083"| SCS
 
-    %% Services to their own DBs
-    LS -->|"JDBC"| LDB
-    PS -->|"JDBC"| PDB
-    SCS -->|"JDBC"| SDB
+    %% Services to their own databases on RDS
+    LS -->|"JDBC (TLS)"| LDB
+    PS -->|"JDBC (TLS)"| PDB
+    SCS -->|"JDBC (TLS)"| SDB
 
     %% Service-to-service
-    PS -->|"HTTP :8081 (validate user)"| LS
-    PS -->|"HTTP :8083 (trigger scan)"| SCS
+    PS -->|"HTTP :8083 (trigger scan, results)"| SCS
 
-    %% Scan Service to SonarQube
+    %% Scan Service to SonarQube on the web EC2
     SCS -->|"sonar-scanner CLI → HTTP :9001"| SQ
     SQ -->|"JDBC"| SQDB
     SQ -->|"Scan Results"| SCS
 
     %% External integrations
-    PS -->|"GitHub API (repo metadata)"| GH
     SCS -->|"Git Clone (source code)"| GH
     SCS -->|"REST API (AI suggestions)"| AI
 
-    %% CI/CD pushes images to ECR
+    %% CI/CD deploys images from ECR
     ECR -.->|"docker pull (deployment)"| FE
     ECR -.->|"docker pull (deployment)"| LS
     ECR -.->|"docker pull (deployment)"| PS

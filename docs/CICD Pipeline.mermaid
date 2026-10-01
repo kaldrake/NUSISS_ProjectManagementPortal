@@ -4,7 +4,20 @@ flowchart LR
         Code[Write Code]
         Commit[git commit]
         Push["git push
-(main / feature-projectScan)"]
+(add-JWT-config deploys ·
+main / feature-sonarCloud scan only)"]
+    end
+
+    subgraph "GitHub Actions: sonarcloud-scan"
+        SonarCI["📊 SonarCloud Scan
+mvn compile × 3 services
++ frontend tests with coverage
+Single shared project · monorepo"]
+    end
+
+    subgraph "GitHub Actions: snyk-scan (disabled · scan limit)"
+        Snyk["🛡️ Snyk Dependency Scan
+Matrix: login / project / scan + frontend package.json"]
     end
 
     subgraph "GitHub Actions: docker-build-push"
@@ -24,7 +37,7 @@ project-portal-backend/springBoot_project"]
             B3["Build scan-service
 project-portal-backend/springBoot_scan"]
             B4["Build frontend
-project-portal-frontend (Nginx)"]
+project-portal-frontend (Nginx, /api proxy)"]
         end
 
         subgraph "Push to ECR (2 tags each)"
@@ -37,43 +50,39 @@ scan-{sha}"]
             T4["frontend-latest
 frontend-{sha}"]
         end
-
-        Output[Output Image URIs]
     end
 
-    subgraph "AWS ECR (ap-southeast-1)"
-        ECR[("📦 nusiss_projectmanagementportal 4 image repositories")]
+    subgraph "AWS ECR (ap-southeast-2)"
+        ECR[("📦 nusiss_projectmanagementportal")]
     end
 
-    subgraph "AWS ECS Fargate (ap-southeast-1)"
-        FDeploy["Task Definitions reference*-latest image tags"]
-        F1["login-service task"]
-        F2["project-service task"]
-        F3["scan-service task"]
-        F4["frontend task"]
+    subgraph "GitHub Actions: deploy-backends (parallel · SSH via web EC2)"
+        D1["login EC2
+deploy.sh {sha} + /health"]
+        D2["project EC2
+deploy.sh {sha} + /health"]
+        D3["scan EC2
+deploy.sh {sha} + /health"]
     end
 
-    subgraph "GitHub Actions: sonarcloud-scan"
-        SonarCI["📊 SonarCloud Scan Single shared project · monorepo (3 backend services + frontend)"]
+    subgraph "GitHub Actions: deploy-web (only if all backends healthy)"
+        DW["web EC2
+deploy.sh {sha}
+frontend + reachability of each backend"]
     end
 
-    subgraph "GitHub Actions: snyk-scan"
-        Snyk["🛡️ Snyk Dependency Scan Matrix: login / project / scan + frontend package.json"]
-    end
-
-    Code --> Commit --> Push 
-    Push --> Snyk
-    Snyk --> SonarCI
-    SonarCI --> Checkout
+    Code --> Commit --> Push
+    Push --> SonarCI
+    Push -.-> Snyk
+    Push --> Checkout
     Checkout --> AWSCreds --> ECRLogin
     ECRLogin --> B1 & B2 & B3 & B4
     B1 --> T1 --> ECR
     B2 --> T2 --> ECR
     B3 --> T3 --> ECR
     B4 --> T4 --> ECR
-    ECR --> Output
-    ECR -.->|"manual redeploy pulls :latest"| FDeploy
-    FDeploy --> F1 & F2 & F3 & F4
+    ECR --> D1 & D2 & D3
+    D1 & D2 & D3 --> DW
 
     %% Styling
     style Checkout fill:#f97316,color:#fff
@@ -88,11 +97,9 @@ frontend-{sha}"]
     style T3 fill:#3b82f6,color:#fff
     style T4 fill:#3b82f6,color:#fff
     style ECR fill:#FF9800,color:#fff
-    style Output fill:#10b981,color:#fff
-    style FDeploy fill:#10b981,color:#fff
-    style F1 fill:#0ea5e9,color:#fff
-    style F2 fill:#0ea5e9,color:#fff
-    style F3 fill:#0ea5e9,color:#fff
-    style F4 fill:#0ea5e9,color:#fff
+    style D1 fill:#0ea5e9,color:#fff
+    style D2 fill:#0ea5e9,color:#fff
+    style D3 fill:#0ea5e9,color:#fff
+    style DW fill:#10b981,color:#fff
     style Snyk fill:#f59e0b,color:#fff
     style SonarCI fill:#0d9488,color:#fff
