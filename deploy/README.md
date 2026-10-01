@@ -8,7 +8,7 @@ push → GitHub Actions: build 4 images → ECR (nusiss_projectmanagementportal)
 
 | EC2 | Runs (`hosts/<role>.yml`) | Reachable from |
 |---|---|---|
-| #1 web (Elastic IP) | frontend/Nginx :80, SonarQube :9001 + its PostgreSQL | Internet :80; your IP :9001/:22; backends :9001 |
+| #1 web (Elastic IP) | Caddy :80/:443 (HTTPS) → frontend/Nginx, SonarQube :9001 + its PostgreSQL | Internet :80/:443; your IP :9001/:22; backends :9001 |
 | #2 login | login-service :8081 | web EC2 |
 | #3 project | project-service :8082 | web EC2 |
 | #4 scan | scan-service :8083 | web and project EC2s |
@@ -17,6 +17,11 @@ push → GitHub Actions: build 4 images → ECR (nusiss_projectmanagementportal)
 backend EC2s can reach (TLS required). Services find each other by **Route 53 private DNS names**
 (`web` / `login` / `project` / `scan` `.portal.internal`, visible only inside the VPC), set in each EC2's
 `/opt/portal/.env`. CI copies `hosts/<role>.yml` to `/opt/portal/docker-compose.prod.yml` on each EC2.
+
+**HTTPS:** Caddy on the web EC2 serves `https://<SITE_HOSTNAME>` with a Let's Encrypt certificate it
+obtains and renews itself (`hosts/Caddyfile`). Without a domain, use the free `<elastic-ip-with-dashes>.sslip.io`
+name, which resolves to the Elastic IP. HTTP and the bare IP redirect to it. The Spring services trust
+`X-Forwarded-Proto` from private IPs (`SERVER_FORWARD_HEADERS_STRATEGY=native`), so HTTPS calls stay same-origin.
 
 **Replacing an EC2:** after launching the new instance, re-run `bash provision-dns.sh` in CloudShell.
 It points the name at the new private IP; no `.env` or GitHub secret changes are needed.

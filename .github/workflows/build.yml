@@ -473,6 +473,7 @@ jobs:
       - name: Copy deployment files
         run: |
           scp deploy/hosts/web.yml web:/opt/portal/docker-compose.prod.yml
+          scp deploy/hosts/Caddyfile web:/opt/portal/Caddyfile
           scp deploy/scripts/deploy.sh web:/opt/portal/deploy.sh
 
       - name: Pull images and restart stack
@@ -491,7 +492,10 @@ jobs:
             echo "FAIL $1"; return 1
           }
           wait_for frontend "docker compose -f docker-compose.prod.yml exec -T frontend wget -qO- http://localhost/"
-          # The web EC2 must reach each backend EC2 (security groups + private IPs in .env)
+          # Valid certificate + Caddy -> Nginx path (first issuance can take a minute)
+          site="$(grep -E '^SITE_HOSTNAME=' .env | tail -1 | cut -d= -f2-)"
+          wait_for "https://$site" "curl -fs --resolve $site:443:127.0.0.1 https://$site/"
+          # The web EC2 must reach each backend EC2 (security groups + names in .env)
           for var in LOGIN_UPSTREAM PROJECT_UPSTREAM SCAN_UPSTREAM; do
             upstream="$(grep -E "^${var}=" .env | tail -1 | cut -d= -f2-)"
             wait_for "$var ($upstream)" "curl -fs http://$upstream/health"

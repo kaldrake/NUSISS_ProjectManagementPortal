@@ -1,0 +1,13 @@
+# HTTPS front door on the web EC2. Caddy obtains and renews the Let's Encrypt certificate
+# for SITE_HOSTNAME automatically, redirects HTTP to HTTPS and proxies to the Nginx frontend.
+# CI copies this file to /opt/portal/Caddyfile; SITE_HOSTNAME comes from /opt/portal/.env.
+
+{$SITE_HOSTNAME} {
+	encode gzip
+	reverse_proxy frontend:80
+}
+
+# Anything else on port 80 (e.g. the bare IP): send it to the HTTPS hostname
+http:// {
+	redir https://{$SITE_HOSTNAME}{uri} permanent
+}

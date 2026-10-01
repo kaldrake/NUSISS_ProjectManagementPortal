@@ -1,5 +1,6 @@
-# EC2 #1 "web" (Elastic IP): frontend/Nginx (public :80) + SonarQube (:9001) and its PostgreSQL.
-# Nginx proxies /api/* to the backend EC2s at LOGIN_UPSTREAM / PROJECT_UPSTREAM / SCAN_UPSTREAM.
+# EC2 #1 "web" (Elastic IP): Caddy (public :80/:443, HTTPS) -> frontend/Nginx, plus SonarQube (:9001)
+# and its PostgreSQL. Nginx proxies /api/* to the backend EC2s at LOGIN_UPSTREAM / PROJECT_UPSTREAM /
+# SCAN_UPSTREAM.
 # CI copies this file to /opt/portal/docker-compose.prod.yml; secrets come from /opt/portal/.env.
 
 name: portal
@@ -49,12 +50,30 @@ services:
     networks:
       - portal-network
 
+  # HTTPS for SITE_HOSTNAME (Let's Encrypt, auto-renewed); HTTP redirects to HTTPS
+  caddy:
+    image: caddy:2
+    container_name: portal-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_HOSTNAME=${SITE_HOSTNAME:?Set SITE_HOSTNAME (e.g. 13-238-251-255.sslip.io) in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    networks:
+      - portal-network
+
+  # Internal only: reached through Caddy
   frontend:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY:-nusiss_projectmanagementportal}:frontend-${IMAGE_TAG:-latest}
     container_name: portal-frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
     environment:
       - LOGIN_UPSTREAM=${LOGIN_UPSTREAM:?Set LOGIN_UPSTREAM (e.g. login.portal.internal:8081) in .env}
       - PROJECT_UPSTREAM=${PROJECT_UPSTREAM:?Set PROJECT_UPSTREAM (e.g. project.portal.internal:8082) in .env}
@@ -71,3 +90,5 @@ volumes:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:
+  caddy_data:
+  caddy_config:

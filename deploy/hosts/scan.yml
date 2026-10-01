@@ -13,6 +13,8 @@ services:
       - "8083:8083"
     environment:
       - SERVER_PORT=8083
+      # Trust X-Forwarded-Proto/For from the proxies (private IPs only) so HTTPS requests are same-origin
+      - SERVER_FORWARD_HEADERS_STRATEGY=native
       - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST:?Set DB_HOST in .env}:3306/scan_db?sslMode=REQUIRED&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=scan_user
       - SPRING_DATASOURCE_PASSWORD=${SCAN_DB_PASSWORD}

@@ -66,6 +66,7 @@ if [ "$SG_ID" = "None" ]; then
     --description "Project portal EC2 Docker host" --query GroupId --output text)"
   # App (frontend + /api proxy) is public
   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 80 --cidr 0.0.0.0/0 >/dev/null
+  aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 443 --cidr 0.0.0.0/0 >/dev/null
   # SSH: GitHub Actions runners have no fixed IPs, so key-only SSH is open to all
   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null
   # SonarQube UI: only you
