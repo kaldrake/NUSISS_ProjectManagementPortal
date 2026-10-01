@@ -27,5 +27,5 @@ mkswap /swapfile
 swapon /swapfile
 echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
-mkdir -p /opt/portal/mysql-init
+mkdir -p /opt/portal
 chown -R ec2-user:ec2-user /opt/portal

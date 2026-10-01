@@ -316,14 +316,14 @@ jobs:
 
       - name: Copy deployment files to EC2
         run: |
-          scp -i ~/.ssh/ec2.pem -r \
-            deploy/docker-compose.prod.yml deploy/scripts/deploy.sh deploy/mysql-init \
+          scp -i ~/.ssh/ec2.pem \
+            deploy/docker-compose.prod.yml deploy/scripts/deploy.sh deploy/scripts/init-rds.sh \
             ec2-user@${{ secrets.EC2_HOST }}:/opt/portal/
 
       - name: Pull images and restart stack
         run: |
           ssh -i ~/.ssh/ec2.pem ec2-user@${{ secrets.EC2_HOST }} \
-            "chmod +x /opt/portal/deploy.sh && /opt/portal/deploy.sh ${{ github.sha }}"
+            "chmod +x /opt/portal/deploy.sh /opt/portal/init-rds.sh && /opt/portal/deploy.sh ${{ github.sha }}"
 
       - name: Health check
         run: |
