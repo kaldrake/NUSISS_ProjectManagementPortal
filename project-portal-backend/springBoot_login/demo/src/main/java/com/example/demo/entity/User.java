@@ -4,17 +4,20 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_username", columnList = "username"),
+    @Index(name = "idx_email", columnList = "email")
+})
 public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(length = 50, nullable = false, unique = true)
     private String username;
 
-    @Column(nullable = false, unique = true)
+    @Column(length = 100, nullable = false, unique = true)
     private String email;
 
     @Column(name = "password_hash", nullable = false)
@@ -23,11 +26,18 @@ public class User {
     @Column(nullable = false)
     private String role = "DEVELOPER";
 
+    @Column(name = "github_id")
     private Long githubId;
-    private String avatarUrl;
 
-    @Column(updatable = false)
+    @Column(name = "github_access_token")
+    private String githubAccessToken;
+
+    @Column(name = "created_at", updatable = false,
+            columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at",
+            columnDefinition = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt;
 
     @PrePersist
@@ -53,8 +63,8 @@ public class User {
     public void setRole(String role) { this.role = role; }
     public Long getGithubId() { return githubId; }
     public void setGithubId(Long githubId) { this.githubId = githubId; }
-    public String getAvatarUrl() { return avatarUrl; }
-    public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+    public String getGithubAccessToken() { return githubAccessToken; }
+    public void setGithubAccessToken(String githubAccessToken) { this.githubAccessToken = githubAccessToken; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.entity.User;
+import com.example.demo.repository.SessionRepository;
 import com.example.demo.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,7 +12,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,11 +31,13 @@ class AuthControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository userRepository;
+    @Autowired private SessionRepository sessionRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
+        sessionRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -62,8 +64,24 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.user.role").value("DEVELOPER"))
                 .andReturn();
 
-        String responseBody = result.getResponse().getContentAsString();
-        assertThat(responseBody).contains("token");
+        assertThat(result.getResponse().getContentAsString()).contains("token");
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/register - saves session to DB")
+    void register_SavesSessionToDatabase() throws Exception {
+        Map<String, String> request = Map.of(
+                "username", "sessionuser",
+                "email", "session@example.com",
+                "password", "password123"
+        );
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
+
+        assertThat(sessionRepository.count()).isEqualTo(1);
     }
 
     @Test
@@ -156,6 +174,20 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/auth/login - saves session to DB")
+    void login_SavesSessionToDatabase() throws Exception {
+        createTestUser("testuser", "test@example.com");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("username", "testuser", "password", "password123"))))
+                .andExpect(status().isOk());
+
+        assertThat(sessionRepository.count()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("POST /api/auth/login - wrong password returns 401")
     void login_WrongPassword_Returns401() throws Exception {
         createTestUser("testuser", "test@example.com");
@@ -200,24 +232,12 @@ class AuthControllerTest {
     // =============================================
 
     @Test
-    @DisplayName("GET /api/auth/me - valid token returns user info")
-    void getMe_ValidToken_ReturnsUserInfo() throws Exception {
+    @DisplayName("GET /api/auth/me - valid token with active session returns user info")
+    void getMe_ValidTokenWithActiveSession_ReturnsUserInfo() throws Exception {
         createTestUser("testuser", "test@example.com");
 
-        // Login to get token
-        Map<String, String> loginRequest = Map.of(
-                "username", "testuser",
-                "password", "password123"
-        );
-        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginRequest)))
-                .andReturn();
+        String token = loginAndGetToken("testuser", "password123");
 
-        String token = objectMapper.readTree(
-                loginResult.getResponse().getContentAsString()).get("token").asText();
-
-        // Use token to get current user
         mockMvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -227,7 +247,7 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/auth/me - no token returns 403 (unauthenticated)")
+    @DisplayName("GET /api/auth/me - no token returns 403")
     void getMe_NoToken_Returns403() throws Exception {
         mockMvc.perform(get("/api/auth/me"))
                 .andExpect(result ->
@@ -235,54 +255,122 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/auth/me - invalid token returns 403 (filter rejects malformed token)")
-    void getMe_InvalidToken_ReturnsError() throws Exception {
+    @DisplayName("GET /api/auth/me - invalid token returns 403")
+    void getMe_InvalidToken_Returns403() throws Exception {
         mockMvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer invalid.token.here"))
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isIn(403, 401));
     }
 
+    // =============================================
+    // LOGOUT TESTS
+    // =============================================
+
     @Test
-    @DisplayName("Full flow - register then login returns consistent user data")
-    void fullFlow_RegisterThenLogin_ReturnsConsistentData() throws Exception {
-        // Register
-        Map<String, String> registerReq = Map.of(
-                "username", "flowuser",
-                "email", "flow@example.com",
-                "password", "password123"
-        );
-        MvcResult registerResult = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerReq)))
-                .andExpect(status().isCreated())
-                .andReturn();
+    @DisplayName("POST /api/auth/logout - valid token returns 200 and deletes session")
+    void logout_WithValidToken_Returns200AndDeletesSession() throws Exception {
+        createTestUser("testuser", "test@example.com");
+        String token = loginAndGetToken("testuser", "password123");
 
-        String registerToken = objectMapper.readTree(
-                registerResult.getResponse().getContentAsString()).get("token").asText();
+        assertThat(sessionRepository.count()).isEqualTo(1);
 
-        // Login with same credentials
-        Map<String, String> loginReq = Map.of(
-                "username", "flowuser",
-                "password", "password123"
-        );
-        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginReq)))
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andReturn();
+                .andExpect(jsonPath("$.message").value("Logged out successfully"));
 
-        String loginUserId = objectMapper.readTree(
-                loginResult.getResponse().getContentAsString()).get("user").get("id").asText();
-        String registerUserId = objectMapper.readTree(
-                registerResult.getResponse().getContentAsString()).get("user").get("id").asText();
+        assertThat(sessionRepository.count()).isEqualTo(0);
+    }
 
-        assertThat(loginUserId).isEqualTo(registerUserId);
-        assertThat(registerToken).isNotNull();
+    @Test
+    @DisplayName("POST /api/auth/logout - session deleted means token is rejected on next request")
+    void logout_TokenRejectedAfterLogout() throws Exception {
+        createTestUser("testuser", "test@example.com");
+        String token = loginAndGetToken("testuser", "password123");
+
+        // Confirm /me works before logout
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        // Logout — deletes session from DB
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        // Same token is now rejected because session no longer exists
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(result ->
+                        assertThat(result.getResponse().getStatus()).isIn(403, 401));
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/logout - without token returns 403")
+    void logout_WithoutToken_Returns403() throws Exception {
+        mockMvc.perform(post("/api/auth/logout"))
+                .andExpect(result ->
+                        assertThat(result.getResponse().getStatus()).isIn(403, 401));
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/logout - multiple logins each get own session")
+    void logout_MultipleLoginsSeparateSessions() throws Exception {
+        createTestUser("testuser", "test@example.com");
+
+        String token1 = loginAndGetToken("testuser", "password123");
+        String token2 = loginAndGetToken("testuser", "password123");
+
+        assertThat(sessionRepository.count()).isEqualTo(2);
+
+        // Logout only token1
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + token1))
+                .andExpect(status().isOk());
+
+        // token1 rejected, token2 still valid
+        assertThat(sessionRepository.count()).isEqualTo(1);
+        mockMvc.perform(get("/api/auth/me")
+                        .header("Authorization", "Bearer " + token2))
+                .andExpect(status().isOk());
     }
 
     // =============================================
-    // HELPER
+    // FULL FLOW TESTS
+    // =============================================
+
+    @Test
+    @DisplayName("Full flow - register then login returns consistent user data")
+    void fullFlow_RegisterThenLogin_ReturnsConsistentData() throws Exception {
+        MvcResult registerResult = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "flowuser",
+                                "email", "flow@example.com",
+                                "password", "password123"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "flowuser",
+                                "password", "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String registerUserId = objectMapper.readTree(
+                registerResult.getResponse().getContentAsString()).get("user").get("id").asText();
+        String loginUserId = objectMapper.readTree(
+                loginResult.getResponse().getContentAsString()).get("user").get("id").asText();
+
+        assertThat(registerUserId).isEqualTo(loginUserId);
+        assertThat(sessionRepository.count()).isEqualTo(2); // one for register, one for login
+    }
+
+    // =============================================
+    // HELPERS
     // =============================================
 
     private void createTestUser(String username, String email) {
@@ -292,5 +380,15 @@ class AuthControllerTest {
         user.setPasswordHash(passwordEncoder.encode("password123"));
         user.setRole("DEVELOPER");
         userRepository.save(user);
+    }
+
+    private String loginAndGetToken(String username, String password) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("username", username, "password", password))))
+                .andReturn();
+        return objectMapper.readTree(
+                result.getResponse().getContentAsString()).get("token").asText();
     }
 }

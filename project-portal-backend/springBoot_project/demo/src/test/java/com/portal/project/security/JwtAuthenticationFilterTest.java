@@ -15,7 +15,6 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
@@ -26,14 +25,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("JwtAuthenticationFilter Unit Tests - Project Service")
+@DisplayName("JwtAuthenticationFilter Unit Tests - Project Service (Signature-Only Validation)")
 class JwtAuthenticationFilterTest {
 
-    @Mock
-    private JwtUtil jwtUtil;
-
-    @InjectMocks
-    private JwtAuthenticationFilter filter;
+    @Mock private JwtUtil jwtUtil;
+    @InjectMocks private JwtAuthenticationFilter filter;
 
     private static final String SECRET =
             "bXlTZWNyZXRLZXlUaGF0U2hvdWxkQmVDaGFuZ2VkSW5Qcm9kdWN0aW9u";
@@ -72,7 +68,6 @@ class JwtAuthenticationFilterTest {
     @DisplayName("Request with no Authorization header - passes through without authentication")
     void filter_NoAuthHeader_NoAuthenticationSet() throws Exception {
         filter.doFilterInternal(request, response, filterChain);
-
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
@@ -80,14 +75,12 @@ class JwtAuthenticationFilterTest {
     @DisplayName("Request with non-Bearer Authorization header - passes through without authentication")
     void filter_BasicAuthHeader_NoAuthenticationSet() throws Exception {
         request.addHeader("Authorization", "Basic dXNlcjpwYXNz");
-
         filter.doFilterInternal(request, response, filterChain);
-
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 
     @Test
-    @DisplayName("Request with valid Bearer token - sets authentication in SecurityContext")
+    @DisplayName("Request with valid Bearer token and valid signature - sets authentication")
     void filter_ValidBearerToken_SetsAuthentication() throws Exception {
         String token = buildValidToken("testuser");
         request.addHeader("Authorization", "Bearer " + token);
@@ -103,11 +96,11 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("Request with invalid token - no authentication set")
+    @DisplayName("Request with invalid token signature - no authentication set")
     void filter_InvalidToken_NoAuthenticationSet() throws Exception {
         request.addHeader("Authorization", "Bearer invalid.token.here");
-
-        org.mockito.Mockito.when(jwtUtil.isTokenValid("invalid.token.here")).thenReturn(false);
+        org.mockito.Mockito.when(jwtUtil.extractUsername("invalid.token.here"))
+                .thenThrow(new RuntimeException("Invalid token"));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -118,9 +111,7 @@ class JwtAuthenticationFilterTest {
     @DisplayName("Filter always calls next filter in chain")
     void filter_AlwaysCallsFilterChain() throws Exception {
         MockFilterChain mockChain = org.mockito.Mockito.mock(MockFilterChain.class);
-
         filter.doFilterInternal(request, response, mockChain);
-
         verify(mockChain).doFilter(request, response);
     }
 

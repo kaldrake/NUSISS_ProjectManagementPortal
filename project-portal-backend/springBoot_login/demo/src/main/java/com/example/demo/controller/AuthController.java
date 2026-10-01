@@ -2,7 +2,9 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.auth.LoginRequestDTO;
 import com.example.demo.dto.auth.RegisterRequestDTO;
+import com.example.demo.entity.Session;
 import com.example.demo.entity.User;
+import com.example.demo.repository.SessionRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.security.JwtUtil;
 import jakarta.validation.Valid;
@@ -17,6 +19,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
@@ -25,6 +28,7 @@ public class AuthController {
 
     @Autowired private AuthenticationManager authenticationManager;
     @Autowired private UserRepository userRepository;
+    @Autowired private SessionRepository sessionRepository;
     @Autowired private UserDetailsService userDetailsService;
     @Autowired private JwtUtil jwtUtil;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -38,18 +42,14 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("message", "Invalid username or password"));
         }
+
         User user = userRepository.findByUsername(request.getUsername()).orElseThrow();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
-        String token = jwtUtil.generateToken(userDetails, user.getId(), user.getRole());
-        return ResponseEntity.ok(Map.of(
-                "token", token,
-                "user", Map.of(
-                        "id", user.getId(),
-                        "username", user.getUsername(),
-                        "email", user.getEmail(),
-                        "role", user.getRole()
-                )
-        ));
+        String token = jwtUtil.generateToken(userDetails, user.getId());
+
+        saveSession(user.getId(), token);
+
+        return ResponseEntity.ok(buildAuthResponse(token, user));
     }
 
     @PostMapping("/register")
@@ -67,16 +67,18 @@ public class AuthController {
         userRepository.save(user);
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
-        String token = jwtUtil.generateToken(userDetails, user.getId(), user.getRole());
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-                "token", token,
-                "user", Map.of(
-                        "id", user.getId(),
-                        "username", user.getUsername(),
-                        "email", user.getEmail(),
-                        "role", user.getRole()
-                )
-        ));
+        String token = jwtUtil.generateToken(userDetails, user.getId());
+
+        saveSession(user.getId(), token);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(buildAuthResponse(token, user));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.replace("Bearer ", "");
+        sessionRepository.deleteByJwtToken(token);
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
 
     @GetMapping("/me")
@@ -89,7 +91,27 @@ public class AuthController {
                 "id", user.getId(),
                 "username", user.getUsername(),
                 "email", user.getEmail(),
-                "role", user.getRole()
+                "role", "DEVELOPER"
         ));
+    }
+
+    private void saveSession(Long userId, String token) {
+        Session session = new Session();
+        session.setUserId(userId);
+        session.setJwtToken(token);
+        session.setExpiresAt(LocalDateTime.now().plusSeconds(jwtUtil.getExpirationMs() / 1000));
+        sessionRepository.save(session);
+    }
+
+    private Map<String, Object> buildAuthResponse(String token, User user) {
+        return Map.of(
+                "token", token,
+                "user", Map.of(
+                        "id", user.getId(),
+                        "username", user.getUsername(),
+                        "email", user.getEmail(),
+                        "role", user.getRole()
+                )
+        );
     }
 }

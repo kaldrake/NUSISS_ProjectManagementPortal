@@ -1,5 +1,6 @@
 package com.example.demo.security;
 
+import com.example.demo.repository.SessionRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,35 +15,50 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Autowired private JwtUtil jwtUtil;
     @Autowired private UserDetailsService userDetailsService;
+    @Autowired private SessionRepository sessionRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
+
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
+
         try {
             String token = authHeader.substring(7);
             String username = jwtUtil.extractUsername(token);
+
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-                if (jwtUtil.isTokenValid(token, userDetails)) {
+
+                // Step 1: validate JWT signature and expiry
+                boolean signatureValid = jwtUtil.isTokenValid(token, userDetails);
+
+                // Step 2: validate session exists in DB and is not expired (revocation check)
+                boolean sessionValid = sessionRepository
+                        .existsByJwtTokenAndExpiresAtAfter(token, LocalDateTime.now());
+
+                if (signatureValid && sessionValid) {
                     UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails, null, userDetails.getAuthorities());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
         } catch (Exception ignored) {}
+
         filterChain.doFilter(request, response);
     }
 }

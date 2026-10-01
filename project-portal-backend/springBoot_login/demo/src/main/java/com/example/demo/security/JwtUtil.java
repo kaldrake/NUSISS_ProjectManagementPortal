@@ -26,10 +26,9 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
     }
 
-    public String generateToken(UserDetails userDetails, Long userId, String role) {
+    public String generateToken(UserDetails userDetails, Long userId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
-        claims.put("role", role);
         return Jwts.builder()
                 .claims(claims)
                 .subject(userDetails.getUsername())
@@ -45,6 +44,10 @@ public class JwtUtil {
 
     public Long extractUserId(String token) {
         return extractAllClaims(token).get("userId", Long.class);
+    }
+
+    public long getExpirationMs() {
+        return jwtExpiration;
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {

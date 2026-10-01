@@ -29,7 +29,6 @@ class JwtUtilTest {
         jwtUtil = new JwtUtil();
         ReflectionTestUtils.setField(jwtUtil, "jwtSecret", SECRET);
         ReflectionTestUtils.setField(jwtUtil, "jwtExpiration", EXPIRATION);
-
         userDetails = new User("testuser", "password",
                 List.of(new SimpleGrantedAuthority("ROLE_DEVELOPER")));
     }
@@ -37,42 +36,42 @@ class JwtUtilTest {
     @Test
     @DisplayName("generateToken - should return non-null token")
     void generateToken_ShouldReturnNonNullToken() {
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         assertThat(token).isNotNull().isNotEmpty();
     }
 
     @Test
     @DisplayName("generateToken - token should contain three JWT parts")
     void generateToken_ShouldHaveThreeParts() {
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         assertThat(token.split("\\.")).hasSize(3);
     }
 
     @Test
     @DisplayName("extractUsername - should return correct username from token")
     void extractUsername_ShouldReturnCorrectUsername() {
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         assertThat(jwtUtil.extractUsername(token)).isEqualTo("testuser");
     }
 
     @Test
     @DisplayName("extractUserId - should return correct userId from token")
     void extractUserId_ShouldReturnCorrectUserId() {
-        String token = jwtUtil.generateToken(userDetails, 42L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 42L);
         assertThat(jwtUtil.extractUserId(token)).isEqualTo(42L);
     }
 
     @Test
     @DisplayName("isTokenValid - valid token and matching user returns true")
     void isTokenValid_ValidTokenAndMatchingUser_ReturnsTrue() {
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         assertThat(jwtUtil.isTokenValid(token, userDetails)).isTrue();
     }
 
     @Test
     @DisplayName("isTokenValid - valid token but wrong user returns false")
     void isTokenValid_WrongUser_ReturnsFalse() {
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         UserDetails otherUser = new User("otheruser", "password",
                 List.of(new SimpleGrantedAuthority("ROLE_DEVELOPER")));
         assertThat(jwtUtil.isTokenValid(token, otherUser)).isFalse();
@@ -82,14 +81,14 @@ class JwtUtilTest {
     @DisplayName("isTokenValid - expired token returns false")
     void isTokenValid_ExpiredToken_ReturnsFalse() {
         ReflectionTestUtils.setField(jwtUtil, "jwtExpiration", EXPIRED);
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         assertThat(jwtUtil.isTokenValid(token, userDetails)).isFalse();
     }
 
     @Test
     @DisplayName("isTokenValid - tampered token returns false")
     void isTokenValid_TamperedToken_ReturnsFalse() {
-        String token = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
+        String token = jwtUtil.generateToken(userDetails, 1L);
         String tampered = token.substring(0, token.length() - 5) + "XXXXX";
         assertThat(jwtUtil.isTokenValid(tampered, userDetails)).isFalse();
     }
@@ -98,9 +97,9 @@ class JwtUtilTest {
     @DisplayName("generateToken - different users produce different tokens")
     void generateToken_DifferentUsers_ProduceDifferentTokens() {
         UserDetails user2 = new User("anotheruser", "password",
-                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
-        String token1 = jwtUtil.generateToken(userDetails, 1L, "DEVELOPER");
-        String token2 = jwtUtil.generateToken(user2, 2L, "ADMIN");
+                List.of(new SimpleGrantedAuthority("ROLE_DEVELOPER")));
+        String token1 = jwtUtil.generateToken(userDetails, 1L);
+        String token2 = jwtUtil.generateToken(user2, 2L);
         assertThat(token1).isNotEqualTo(token2);
     }
 }

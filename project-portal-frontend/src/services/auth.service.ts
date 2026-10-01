@@ -62,8 +62,15 @@ export const authService = {
         return response.data;
     },
 
-    logout() {
-        this.clearToken();
-        window.location.replace('/login');
+    async logout(): Promise<void> {
+        try {
+            // Revoke session on the server (removes token from sessions table)
+            await loginApi.post('/auth/logout');
+        } catch (error) {
+            // Proceed with local logout even if server call fails
+        } finally {
+            this.clearToken();
+            window.location.replace('/login');
+        }
     },
 };
