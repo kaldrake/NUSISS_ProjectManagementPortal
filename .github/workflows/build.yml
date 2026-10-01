@@ -10,8 +10,7 @@ on:
 env:
   #SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
   AWS_REGION: ap-southeast-2
-  ECR_REPOSITORY: nusiss-project-management-portal
-  ECS_CLUSTER: project-portal-cluster
+  ECR_REPOSITORY: nusiss_projectmanagementportal
 
 jobs:
   backend-snyk:
@@ -263,12 +262,13 @@ jobs:
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-latest
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-${{ github.sha }}
 
+      # Same-origin: the frontend's Nginx proxies /api/* to the backend containers
       - name: Create frontend .env
         working-directory: project-portal-frontend
         run: |
-          echo "REACT_APP_LOGIN_API_URL=${{ secrets.REACT_APP_LOGIN_API_URL }}" > .env
-          echo "REACT_APP_PROJECT_API_URL=${{ secrets.REACT_APP_PROJECT_API_URL }}" >> .env
-          echo "REACT_APP_SCAN_API_URL=${{ secrets.REACT_APP_SCAN_API_URL }}" >> .env
+          echo "REACT_APP_LOGIN_API_URL=/api" > .env
+          echo "REACT_APP_PROJECT_API_URL=/api" >> .env
+          echo "REACT_APP_SCAN_API_URL=/api" >> .env
       - name: Verify frontend .env
         working-directory: project-portal-frontend
         run: |
@@ -291,50 +291,56 @@ jobs:
           echo "Scan Service: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-${{ github.sha }}"
           echo "Frontend: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:frontend-${{ github.sha }}"
 
-      # ── Deploy to ECS ────────────────────────────────────────────────────────
-      - name: Deploy login-service to ECS
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service login-service \
-            --force-new-deployment \
-            --health-check-grace-period-seconds 180 \
-            --region ${{ env.AWS_REGION }}
+  # =============================================
+  # DEPLOY TO EC2 DOCKER HOST
+  # =============================================
+  deploy-ec2:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/add-JWT-config')
+    concurrency:
+      group: deploy-ec2
+      cancel-in-progress: false
 
-      - name: Deploy project-service to ECS
-        run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service project-service \
-            --force-new-deployment \
-            --health-check-grace-period-seconds 180 \
-            --region ${{ env.AWS_REGION }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Deploy scan-service to ECS
+      - name: Set up SSH key
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service scan-service \
-            --force-new-deployment \
-            --health-check-grace-period-seconds 180 \
-            --region ${{ env.AWS_REGION }}
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy frontend to ECS
+      - name: Copy deployment files to EC2
         run: |
-          aws ecs update-service \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --service frontend-service \
-            --force-new-deployment \
-            --health-check-grace-period-seconds 180 \
-            --region ${{ env.AWS_REGION }}
+          scp -i ~/.ssh/ec2.pem -r \
+            deploy/docker-compose.prod.yml deploy/scripts/deploy.sh deploy/mysql-init \
+            ec2-user@${{ secrets.EC2_HOST }}:/opt/portal/
 
-      - name: Wait for ECS services to stabilize
+      - name: Pull images and restart stack
         run: |
-          echo "Deployments triggered. Waiting 120s for services to start..."
-          sleep 120
-          aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services login-service project-service scan-service frontend-service \
-            --region ${{ env.AWS_REGION }} \
-            --query "services[*].{Service:serviceName,Running:runningCount,Desired:desiredCount,Status:status}" \
-            --output table
+          ssh -i ~/.ssh/ec2.pem ec2-user@${{ secrets.EC2_HOST }} \
+            "chmod +x /opt/portal/deploy.sh && /opt/portal/deploy.sh ${{ github.sha }}"
+
+      - name: Health check
+        run: |
+          ssh -i ~/.ssh/ec2.pem ec2-user@${{ secrets.EC2_HOST }} 'bash -s' <<'EOF'
+          set -e
+          cd /opt/portal
+          check() {
+            for i in $(seq 1 30); do
+              if docker compose -f docker-compose.prod.yml exec -T "$1" sh -c "$2" >/dev/null 2>&1; then
+                echo "OK   $1"; return 0
+              fi
+              sleep 10
+            done
+            echo "FAIL $1"; docker compose -f docker-compose.prod.yml logs --tail 50 "$1"; return 1
+          }
+          check login-service   "wget -qO- http://localhost:8081/health"
+          check project-service "wget -qO- http://localhost:8082/health"
+          check scan-service    "curl -fs http://localhost:8083/health"
+          check frontend        "wget -qO- http://localhost/"
+          EOF

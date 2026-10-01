@@ -1,0 +1,2 @@
+# Shell scripts run on Linux (EC2 / containers) - never check them out with CRLF
+*.sh text eol=lf
