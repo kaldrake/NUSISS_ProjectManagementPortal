@@ -26,18 +26,6 @@ Spring Boot 3.5 (Java 17)
 Port: 8083"]
             end
 
-            subgraph "Database Layer"
-                LDB[("🗄️ login_db
-MySQL 8.0
-Port: 3306")]
-                PDB[("🗄️ project_db
-MySQL 8.0
-Port: 3306")]
-                SDB[("🗄️ scan_db
-MySQL 8.0
-Port: 3306")]
-            end
-
             subgraph "SonarQube Stack"
                 SQDB[("🐘 sonarqube_db
 PostgreSQL 13
@@ -59,6 +47,11 @@ Gemini (active) · DeepSeek/Claude (standby)"]
     end
 
     subgraph "AWS (ap-southeast-1)"
+        subgraph "Amazon RDS MySQL 8.4 (portal-db, Port: 3306)"
+            LDB[("🗄️ login_db")]
+            PDB[("🗄️ project_db")]
+            SDB[("🗄️ scan_db")]
+        end
         ECR["📦 Amazon ECR
 nusiss_projectmanagementportal
 4 images: login / project / scan / frontend"]
@@ -78,8 +71,7 @@ nusiss_projectmanagementportal
     SCS -->|"JDBC"| SDB
 
     %% Service-to-service
-    PS -->|"HTTP :8081 (validate user)"| LS
-    PS -->|"HTTP :8083 (trigger scan)"| SCS
+    PS -->|"HTTP :8083 (trigger scan, forwards JWT)"| SCS
 
     %% Scan Service to SonarQube
     SCS -->|"sonar-scanner CLI → HTTP :9001"| SQ
@@ -87,8 +79,8 @@ nusiss_projectmanagementportal
     SQ -->|"Scan Results"| SCS
 
     %% External integrations
-    PS -->|"GitHub API (repo metadata)"| GH
-    SCS -->|"Git Clone (source code)"| GH
+    FE -->|"GitHub REST API (repo lookup when adding a repository)"| GH
+    SCS -->|"git clone (source code)"| GH
     SCS -->|"REST API (AI suggestions)"| AI
 
     %% CI/CD pushes images to ECR

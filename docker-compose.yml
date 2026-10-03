@@ -140,6 +140,41 @@ services:
     networks:
       - portal-network
 
+  # =============================================
+  # Unit tests (opt-in): docker compose --profile test run --rm login-tests
+  # or all three: docker compose --profile test up --abort-on-container-exit
+  # Not started by a plain "docker compose up". No database or API keys needed.
+  # =============================================
+  login-tests:
+    profiles: ["test"]
+    image: maven:3.9-eclipse-temurin-17
+    container_name: portal-login-tests
+    working_dir: /app
+    volumes:
+      - ./project-portal-backend/springBoot_login/demo:/app
+      - maven_cache:/root/.m2
+    command: mvn -B test
+
+  project-tests:
+    profiles: ["test"]
+    image: maven:3.9-eclipse-temurin-17
+    container_name: portal-project-tests
+    working_dir: /app
+    volumes:
+      - ./project-portal-backend/springBoot_project/demo:/app
+      - maven_cache:/root/.m2
+    command: mvn -B test
+
+  scan-tests:
+    profiles: ["test"]
+    image: maven:3.9-eclipse-temurin-17
+    container_name: portal-scan-tests
+    working_dir: /app
+    volumes:
+      - ./project-portal-backend/springBoot_scan/demo:/app
+      - maven_cache:/root/.m2
+    command: mvn -B test
+
 networks:
   portal-network:
     driver: bridge
@@ -149,3 +184,4 @@ volumes:
   sonarqube_data:
   sonarqube_extensions:
   sonarqube_logs:
+  maven_cache:

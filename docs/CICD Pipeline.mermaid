@@ -4,7 +4,7 @@ flowchart LR
         Code[Write Code]
         Commit[git commit]
         Push["git push
-(main / feature-projectScan)"]
+(main / feature-sonarCloud; PRs to main)"]
     end
 
     subgraph "GitHub Actions: docker-build-push"
@@ -63,8 +63,8 @@ frontend-{sha}"]
 
     Code --> Commit --> Push 
     Push --> Snyk
-    Snyk --> SonarCI
-    SonarCI --> Checkout
+    Push --> SonarCI
+    Snyk -->|"needs"| Checkout
     Checkout --> AWSCreds --> ECRLogin
     ECRLogin --> B1 & B2 & B3 & B4
     B1 --> T1 --> ECR
