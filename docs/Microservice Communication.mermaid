@@ -3,31 +3,31 @@ graph TD
     FE["🌐 Frontend<br>React + TypeScript<br>:3000"]
 
     subgraph "Backend Microservices"
-        LS["🔐 Login Service<br>:8081<br><br>• POST /api/auth/register<br>• POST /api/auth/login<br>• GET  /api/users/{id}"]
-        PS["📁 Project Service<br>:8082<br><br>• CRUD /api/projects<br>• CRUD /api/projects/{id}/repositories<br>• POST /api/projects/{id}/repositories/{rId}/scan<br>• GET  /api/dashboard/summary"]
-        SCS["🔍 Scan Service<br>:8083<br><br>• POST /api/scans/trigger<br>• GET  /api/scans/{repoId}/latest<br>• GET  /api/scans/{scanId}/vulnerabilities<br>• GET  /api/scans/{scanId}/ai-suggestions"]
+        LS["🔐 Login Service<br>:8081<br><br>• POST /api/auth/register<br>• POST /api/auth/login<br>• GET  /api/auth/me"]
+        PS["📁 Project Service<br>:8082<br><br>• CRUD /api/projects (owner only)<br>• GET/POST /api/projects/{id}/repositories<br>• DELETE /api/projects/{id}/repositories/{rId}<br>• POST /api/projects/{id}/repositories/{rId}/scan<br>• GET  /api/projects/{id}/dashboard"]
+        SCS["🔍 Scan Service<br>:8083<br><br>• POST /api/scans/analyze (202)<br>• GET  /api/scans/{scanId}/status<br>• GET  /api/scans/repositories/{rId}/history<br>• GET  /api/scans/projects/{id}/vulnerabilities<br>• GET/PATCH /api/scans/vulnerabilities/{id}[/status]<br>• POST /api/scans/vulnerabilities/{id}/suggestion/regenerate<br>• GET  /api/scans/dashboard/projects/{id}/summary"]
     end
 
-    subgraph "Databases"
-        LDB[("login_db<br>users<br>sessions")]
+    subgraph "Databases (Amazon RDS MySQL)"
+        LDB[("login_db<br>users")]
         PDB[("project_db<br>projects<br>repositories")]
         SDB[("scan_db<br>scans<br>vulnerabilities<br>ai_suggestions<br>scan_summary")]
     end
 
     subgraph "External Services"
-        GH["🐙 GitHub API<br>Repo metadata + Git clone"]
+        GH["🐙 GitHub<br>REST API + git clone"]
         SQ["📊 SonarQube<br>:9001<br>Static analysis"]
         AI["🤖 AI Suggestion Router<br>Gemini (active) · DeepSeek/Claude (standby)"]
     end
 
     %% Frontend → all services
     FE -->|"Bearer JWT"| LS
-    FE -->|"Bearer JWT + X-User-Id"| PS
+    FE -->|"Bearer JWT"| PS
     FE -->|"Bearer JWT"| SCS
+    FE -->|"GET /repos/{owner}/{repo}<br>(validate repo when adding)"| GH
 
     %% Service-to-service (internal HTTP)
-    PS -->|"GET /api/users/{id}<br>(validate token owner)"| LS
-    PS -->|"POST /api/scans/trigger<br>(delegate scan job)"| SCS
+    PS -->|"POST /api/scans/analyze<br>(async, forwards the caller's JWT)"| SCS
 
     %% Services → their DBs
     LS --- LDB
@@ -35,7 +35,6 @@ graph TD
     SCS --- SDB
 
     %% External integrations
-    PS -->|"GitHub REST API<br>(repo search & metadata)"| GH
     SCS -->|"git clone"| GH
     SCS -->|"sonar-scanner CLI<br>+ REST API (poll + fetch issues)"| SQ
     SCS -->|"AI fix-suggestion request"| AI

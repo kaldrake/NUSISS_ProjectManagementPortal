@@ -9,7 +9,8 @@ erDiagram
         VARCHAR(255) password_hash
         BIGINT      github_id
         VARCHAR(255) github_access_token
-        VARCHAR(20) role            "ADMIN | DEVELOPER"
+        VARCHAR(20) role            "DEVELOPER (assigned at registration)"
+        VARCHAR(500) avatar_url
         TIMESTAMP   created_at
         TIMESTAMP   updated_at
     }
@@ -103,5 +104,5 @@ erDiagram
     projects        ||--o{ repositories      : "contains"
     repositories    ||--o{ scans             : "triggers"
     scans           ||--o{ vulnerabilities   : "produces"
-    scans           ||--||  scan_summary     : "summarised by"
+    scans           ||--o|  scan_summary     : "summarised by"
     vulnerabilities ||--o|  ai_suggestions   : "has suggestion"
