@@ -103,6 +103,9 @@ public class ScanService {
                         aiSuggestion.setModelUsed(aiSuggestionRouter.getModelUsed(result));
                         aiSuggestionRepository.save(aiSuggestion);
                         Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Interrupted while generating the AI suggestion");
                     } catch (Exception e) {
                         log.warn("Failed to get AI suggestion: {}", e.getMessage());
                     }
@@ -127,6 +130,9 @@ public class ScanService {
 //            return response;
             
         } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("Scan failed: {}", e.getMessage(), e);
             scan.setScanStatus(Scan.STATUS_FAILED);
             scan.setErrorMessage(e.getMessage());

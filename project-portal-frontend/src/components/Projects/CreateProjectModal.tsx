@@ -44,7 +44,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose} />
+        <button
+          type="button"
+          aria-label="Close dialog"
+          tabIndex={-1}
+          className="fixed inset-0 w-full h-full cursor-default transition-opacity bg-gray-500 bg-opacity-75"
+          onClick={onClose}
+        />
 
         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
@@ -54,10 +60,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
               </h3>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="project-name" className="block text-sm font-medium text-gray-700 mb-2">
                   Project Name *
                 </label>
                 <input
+                  id="project-name"
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
@@ -67,10 +74,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ isOpen, onClose
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="project-description" className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
                 <textarea
+                  id="project-description"
                   value={projectDescription}
                   onChange={(e) => setProjectDescription(e.target.value)}
                   rows={3}

@@ -19,7 +19,7 @@ const DashboardPage: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchProjects();
+    void fetchProjects();
   }, []);
 
   const fetchProjects = async () => {
