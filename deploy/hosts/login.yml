@@ -14,6 +14,10 @@ services:
       - SERVER_PORT=8081
       # Trust X-Forwarded-Proto/For from the proxies (private IPs only) so HTTPS requests are same-origin
       - SERVER_FORWARD_HEADERS_STRATEGY=native
+      # Behind the internal ALB: take the scheme from X-Portal-Proto (set by Nginx; the ALB rewrites
+      # X-Forwarded-Proto/Port) and ignore the ALB port, so https => 443 like the browser Origin
+      - SERVER_TOMCAT_REMOTEIP_PROTOCOL_HEADER=X-Portal-Proto
+      - SERVER_TOMCAT_REMOTEIP_PORT_HEADER=X-Portal-Port
       - SPRING_DATASOURCE_URL=jdbc:mysql://${DB_HOST:?Set DB_HOST in .env}:3306/login_db?sslMode=REQUIRED&serverTimezone=UTC
       - SPRING_DATASOURCE_USERNAME=login_user
       - SPRING_DATASOURCE_PASSWORD=${LOGIN_DB_PASSWORD}

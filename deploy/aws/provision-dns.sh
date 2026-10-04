@@ -34,8 +34,15 @@ private_ip() {
     --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text
 }
 
+ROLES="web login project scan"
+# With auto scaling, login/project/scan point at the internal ALB (provision-autoscaling.sh)
+if aws elbv2 describe-load-balancers --names "${NAME}-internal" >/dev/null 2>&1; then
+  echo "Internal ALB exists - login/project/scan are managed by provision-autoscaling.sh"
+  ROLES="web"
+fi
+
 CHANGES=""
-for role in web login project scan; do
+for role in $ROLES; do
   tag="$NAME"; [ "$role" != web ] && tag="${NAME}-${role}"
   ip="$(private_ip "$tag")"
   if [ "$ip" = "None" ]; then

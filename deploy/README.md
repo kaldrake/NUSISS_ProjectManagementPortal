@@ -1,73 +1,80 @@
-# Deployment: 4 EC2 + 1 RDS + 1 ECR (ap-southeast-2)
+# Deployment: web EC2 + 3 Auto Scaling Groups + RDS + ECR (ap-southeast-2)
 
 ```
 push → GitHub Actions: build 4 images → ECR (nusiss_projectmanagementportal)
-                     → deploy login / project / scan EC2s (SSH via the web EC2)
+                     → roll login / project / scan Auto Scaling Groups (instance refresh)
                      → deploy web EC2
 ```
 
-| EC2 | Runs (`hosts/<role>.yml`) | Reachable from |
-|---|---|---|
-| #1 web (Elastic IP) | Caddy :80/:443 (HTTPS) → frontend/Nginx, SonarQube :9001 + its PostgreSQL | Internet :80/:443; your IP :9001/:22; backends :9001 |
-| #2 login | login-service :8081 | web EC2 |
-| #3 project | project-service :8082 | web EC2 |
-| #4 scan | scan-service :8083 | web and project EC2s |
+| Tier | Runs | Scaling | Reachable from |
+|---|---|---|---|
+| web EC2 (Elastic IP) | Caddy :80/:443 (HTTPS) → frontend/Nginx, SonarQube :9001 + its PostgreSQL | single host | Internet :80/:443; your IP :9001/:22; backends :9001 |
+| internal ALB | listeners :8081 → login, :8082 → project, :8083 → scan | managed by AWS | web EC2, backends |
+| `project-portal-login-asg` | login-service :8081 (t3.small) | 1–3 instances, CPU 60% | internal ALB |
+| `project-portal-project-asg` | project-service :8082 (t3.small) | 1–3 instances, CPU 60% | internal ALB |
+| `project-portal-scan-asg` | scan-service :8083 (t3.medium) | 1–3 instances, CPU 60% | internal ALB |
 
 `login_db`, `project_db` and `scan_db` live on one **Amazon RDS MySQL 8.4** instance that only the
-backend EC2s can reach (TLS required). Services find each other by **Route 53 private DNS names**
-(`web` / `login` / `project` / `scan` `.portal.internal`, visible only inside the VPC), set in each EC2's
-`/opt/portal/.env`. CI copies `hosts/<role>.yml` to `/opt/portal/docker-compose.prod.yml` on each EC2.
+backend instances can reach (TLS required).
+
+**Service names:** `web.portal.internal` (web EC2) and `login` / `project` / `scan` `.portal.internal`
+(aliases to the internal ALB) are Route 53 private DNS names, visible only inside the VPC. Nginx and the
+services use these names, so instances can come and go without config changes.
+
+**Auto scaling:** each group keeps average CPU near 60% by adding instances (up to 3) and removing them
+(down to 1). A new instance boots from its launch template and reads its config from **SSM Parameter Store**:
+`/portal/<role>/env` (SecureString, the `.env`), `/portal/<role>/compose` (`hosts/<role>.yml`) and
+`/portal/image-tag` (the deployed commit). The ALB only sends traffic to instances whose `/health` passes.
+
+**Deploys:** CI publishes the compose file and image tag to SSM, then starts an **instance refresh**:
+new instances must be healthy before old ones are terminated, so there is no downtime.
 
 **HTTPS:** Caddy on the web EC2 serves `https://<SITE_HOSTNAME>` with a Let's Encrypt certificate it
 obtains and renews itself (`hosts/Caddyfile`). Without a domain, use the free `<elastic-ip-with-dashes>.sslip.io`
 name, which resolves to the Elastic IP. HTTP and the bare IP redirect to it. The Spring services trust
 `X-Forwarded-Proto` from private IPs (`SERVER_FORWARD_HEADERS_STRATEGY=native`), so HTTPS calls stay same-origin.
 
-**Replacing an EC2:** after launching the new instance, re-run `bash provision-dns.sh` in CloudShell.
-It points the name at the new private IP; no `.env` or GitHub secret changes are needed.
-
 ## One-time setup
 
-1. **Provision AWS** — in AWS CloudShell (**ap-southeast-2**), upload the files in `aws/`, then run:
+In AWS CloudShell (**ap-southeast-2**), upload the files in `aws/` and `hosts/login.yml`, `hosts/project.yml`,
+`hosts/scan.yml`, then:
+
+1. **Base infrastructure**
    ```bash
    MY_IP=<your-public-ip>/32 bash provision.sh            # web EC2, ECR, IAM role, key pair
    bash provision-rds.sh                                  # RDS MySQL
-   MY_IP=<your-public-ip>/32 bash provision-backends.sh   # login / project / scan EC2s
+   MY_IP=<your-public-ip>/32 bash provision-backends.sh   # backend security group (+ seed EC2s)
    bash provision-dns.sh                                  # *.portal.internal private DNS names
    ```
-   Defaults: web `t3.large`, login/project `t3.small`, scan `t3.medium`, RDS `db.t4g.micro`.
-
-2. **Create `/opt/portal/.env` on every EC2** from `hosts/<role>.env.example` (wait ~3 min after launch):
+2. **Web EC2 `.env`** from `hosts/web.env.example` (`nano /opt/portal/.env && chmod 600 /opt/portal/.env`).
+3. **Backend config in SSM** — `/portal/login/env`, `/portal/project/env`, `/portal/scan/env` as SecureStrings,
+   from `hosts/<role>.env.example` (`JWT_SECRET` identical in all three). When migrating from running seed
+   EC2s, `bash migrate-env-to-ssm.sh` copies their `/opt/portal/.env` files.
+4. **Databases on RDS** (fresh setup only): `scripts/init-rds.sh` on a backend instance with the
+   `DB_MASTER_*` and `*_DB_PASSWORD` values in its `.env`.
+5. **Auto scaling** — internal ALB, launch templates, Auto Scaling Groups, scaling policies; switches the
+   service names to the ALB once every group has a healthy instance:
    ```bash
-   nano /opt/portal/.env && chmod 600 /opt/portal/.env
+   CI_USER=<IAM user used by GitHub Actions> bash provision-autoscaling.sh
    ```
-   `JWT_SECRET` must be identical on login, project and scan.
+   Then stop (and later terminate) the seed login / project / scan EC2s.
+6. **GitHub secrets**: `EC2_HOST` (web Elastic IP), `EC2_SSH_KEY` (`project-portal-key.pem`),
+   `AWS_ACCESS_KEY_ID_JWT_BRANCH` / `AWS_SECRET_ACCESS_KEY_JWT_BRANCH` (IAM user with ECR push; step 5
+   adds the SSM and instance-refresh permissions).
+7. **Push** to `add-JWT-config` → build, then the 3 groups roll, then web.
+8. **SonarQube token** — `http://<web-ip>:9001` → My Account → Security → **User Token**; set `SONAR_TOKEN`
+   in `/portal/scan/env`, then start an instance refresh of `project-portal-scan-asg` (or re-run a deploy).
 
-3. **Create the databases on RDS** (once, for a fresh setup): copy `scripts/init-rds.sh` to a backend EC2,
-   add `DB_MASTER_USER` / `DB_MASTER_PASSWORD` and the three `*_DB_PASSWORD` values to its `.env`,
-   then run `./init-rds.sh`.
+## Day-to-day
 
-4. **GitHub secrets** (repo → Settings → Secrets → Actions):
-
-   | Secret | Value |
-   |---|---|
-   | `EC2_HOST` | web EC2 Elastic IP |
-   | `EC2_SSH_KEY` | full contents of `project-portal-key.pem` (same key for all EC2s) |
-   | `LOGIN_HOST` / `PROJECT_HOST` / `SCAN_HOST` | `login.portal.internal` / `project.portal.internal` / `scan.portal.internal` |
-   | `AWS_ACCESS_KEY_ID_JWT_BRANCH` / `AWS_SECRET_ACCESS_KEY_JWT_BRANCH` | IAM user with ECR push |
-
-5. **Push** to `add-JWT-config` → build, then backends, then web.
-
-6. **SonarQube token** — `http://<web-ip>:9001` → My Account → Security → **User Token**; put it in
-   `SONAR_TOKEN` on the **scan** EC2, then `docker compose -f docker-compose.prod.yml up -d` there.
-
-## Day-to-day (on any EC2, in `/opt/portal`)
-
-| Task | Command |
+| Task | How |
 |---|---|
-| Status | `docker compose -f docker-compose.prod.yml ps` |
-| Logs | `docker compose -f docker-compose.prod.yml logs -f` |
-| Roll back | `./deploy.sh <older-commit-sha>` (per EC2) |
-| MySQL shell (RDS) | `docker run --rm -it mysql:8.4 mysql -h <DB_HOST> -u admin -p --ssl-mode=REQUIRED` (backend EC2s) |
+| Change a backend setting | Edit `/portal/<role>/env` in SSM Parameter Store, then instance refresh that group (EC2 console → Auto Scaling Groups → Instance refresh) |
+| Scaling activity | EC2 console → Auto Scaling Groups → `<group>` → Activity |
+| Logs on an instance | SSH as `ec2-user`, `cd /opt/portal && docker compose -f docker-compose.prod.yml logs -f` |
+| Restart an instance's service | `sudo /opt/portal/start.sh` on that instance |
+| Roll back | Set `/portal/image-tag` to an older commit SHA, then instance refresh |
+| Web EC2 status / logs | `docker compose -f docker-compose.prod.yml ps` / `logs -f` in `/opt/portal` |
+| MySQL shell (RDS) | `docker run --rm -it mysql:8.4 mysql -h <DB_HOST> -u admin -p --ssl-mode=REQUIRED` (from a backend instance) |
 
 RDS keeps 7 days of automated backups (point-in-time restore) and has deletion protection on.

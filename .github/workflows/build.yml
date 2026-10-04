@@ -371,12 +371,13 @@ jobs:
           echo "Scan Service: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:scan-${{ github.sha }}"
           echo "Frontend: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:frontend-${{ github.sha }}"
   # =============================================
-  # DEPLOY: 3 backend EC2s first (reached through the web EC2 as SSH jump host),
-  # then the web EC2 (frontend/Nginx + SonarQube). If a backend fails, the web
-  # EC2 is left untouched.
+  # DEPLOY: roll the 3 backend Auto Scaling Groups first (instance refresh: new
+  # instances start on the new image from the config in SSM and must pass the ALB
+  # health check before old ones are removed), then the web EC2 (Caddy +
+  # frontend/Nginx + SonarQube). If a backend fails, the web EC2 is left untouched.
   # =============================================
   deploy-backends:
-    name: Deploy ${{ matrix.role }} EC2
+    name: Deploy ${{ matrix.role }} (Auto Scaling Group)
     runs-on: ubuntu-latest
     needs: docker-build-push
     if: github.event_name == 'push' && github.ref == 'refs/heads/add-JWT-config'
@@ -386,63 +387,43 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - role: login
-            host_secret: LOGIN_HOST
-            service: login-service
-            health: wget -qO- http://localhost:8081/health
-          - role: project
-            host_secret: PROJECT_HOST
-            service: project-service
-            health: wget -qO- http://localhost:8082/health
-          - role: scan
-            host_secret: SCAN_HOST
-            service: scan-service
-            health: curl -fs http://localhost:8083/health
+        role: [login, project, scan]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up SSH (jump through the web EC2)
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
-          chmod 600 ~/.ssh/ec2.pem
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-          cat > ~/.ssh/config <<EOF
-          Host web
-            HostName ${{ secrets.EC2_HOST }}
-            User ec2-user
-            IdentityFile ~/.ssh/ec2.pem
-          Host target
-            HostName ${{ secrets[matrix.host_secret] }}
-            User ec2-user
-            IdentityFile ~/.ssh/ec2.pem
-            ProxyJump web
-            StrictHostKeyChecking accept-new
-          EOF
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_JWT_BRANCH }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_JWT_BRANCH }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Copy deployment files
+      - name: Publish config to SSM
         run: |
-          scp deploy/hosts/${{ matrix.role }}.yml target:/opt/portal/docker-compose.prod.yml
-          scp deploy/scripts/deploy.sh target:/opt/portal/deploy.sh
+          aws ssm put-parameter --name /portal/${{ matrix.role }}/compose --type String --overwrite \
+            --value file://deploy/hosts/${{ matrix.role }}.yml
+          aws ssm put-parameter --name /portal/image-tag --type String --overwrite --value ${{ github.sha }}
 
-      - name: Pull image and restart
-        run: ssh target "chmod +x /opt/portal/deploy.sh && /opt/portal/deploy.sh ${{ github.sha }}"
-
-      - name: Health check
+      - name: Roll instances (instance refresh)
         run: |
-          ssh target 'bash -s' <<'EOF'
-          cd /opt/portal
-          for i in $(seq 1 30); do
-            if docker compose -f docker-compose.prod.yml exec -T ${{ matrix.service }} sh -c "${{ matrix.health }}" >/dev/null 2>&1; then
-              echo "OK   ${{ matrix.service }}"; exit 0
-            fi
-            sleep 10
+          asg=project-portal-${{ matrix.role }}-asg
+          id=$(aws autoscaling start-instance-refresh --auto-scaling-group-name "$asg" \
+            --preferences '{"MinHealthyPercentage":100,"MaxHealthyPercentage":200,"InstanceWarmup":120}' \
+            --query InstanceRefreshId --output text)
+          echo "Instance refresh $id on $asg"
+          for i in $(seq 1 60); do
+            read -r status pct < <(aws autoscaling describe-instance-refreshes --auto-scaling-group-name "$asg" \
+              --instance-refresh-ids "$id" --query 'InstanceRefreshes[0].[Status,PercentageComplete]' --output text)
+            echo "$(date -u +%H:%M:%S) $status ${pct}%"
+            case "$status" in
+              Successful) exit 0 ;;
+              Failed|Cancelled|RollbackSuccessful|RollbackFailed) exit 1 ;;
+            esac
+            sleep 20
           done
-          echo "FAIL ${{ matrix.service }}"; docker compose -f docker-compose.prod.yml logs --tail 50 ${{ matrix.service }}; exit 1
-          EOF
+          echo "Instance refresh did not finish in 20 minutes"; exit 1
 
   deploy-web:
     name: Deploy web EC2
