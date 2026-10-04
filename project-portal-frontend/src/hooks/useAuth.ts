@@ -9,7 +9,7 @@ export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = () => {
       const token = authService.getToken();
       
       if (token) {
@@ -23,7 +23,7 @@ export const useAuth = () => {
       setLoading(false);
     };
 
-    void checkAuth();
+    checkAuth();
   }, []);
 
   const logout = () => {

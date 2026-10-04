@@ -19,7 +19,9 @@ public class GitHubRepositoryDTO {
     private Integer vulnerabilityCount;
     
     // Constructors
-    public GitHubRepositoryDTO() {}
+    public GitHubRepositoryDTO() {
+        // Required by Jackson for deserialisation
+    }
     
     // Getters and Setters
     public Long getId() {

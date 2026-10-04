@@ -69,6 +69,7 @@ const ProjectsPage: React.FC = () => {
       toast.success('Project deleted successfully');
       void fetchProjects();
     } catch (err) {
+      console.error('Failed to delete project:', err);
       toast.error('Failed to delete project');
     }
   };

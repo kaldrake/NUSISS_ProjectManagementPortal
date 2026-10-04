@@ -51,7 +51,7 @@ class GitHubServiceTest {
         server.expect(requestTo(REPOS_URL))
                 .andExpect(method(HttpMethod.GET))
                 .andExpect(header("Authorization", "Bearer user-token"))
-                .andRespond(withSuccess("[{\"id\":1,\"name\":\"app\",\"description\":\"demo\",\"language\":\"Java\"}]",
+                .andRespond(withSuccess("[{\"id\":1,\"name\":\"app\",\"full_name\":\"acme/app\",\"clone_url\":\"https://github.com/acme/app.git\",\"default_branch\":\"develop\",\"private\":true,\"description\":\"demo\",\"language\":\"Java\"}]",
                         MediaType.APPLICATION_JSON));
 
         List<GitHubRepositoryDTO> repos = service.getUserRepositories("user-token");
@@ -59,6 +59,10 @@ class GitHubServiceTest {
         assertEquals(1, repos.size());
         assertEquals(1L, repos.get(0).getId());
         assertEquals("app", repos.get(0).getName());
+        assertEquals("acme/app", repos.get(0).getFullName());
+        assertEquals("https://github.com/acme/app.git", repos.get(0).getCloneUrl());
+        assertEquals("develop", repos.get(0).getDefaultBranch());
+        assertTrue(repos.get(0).getIsPrivate());
         server.verify();
     }
 
