@@ -5,7 +5,7 @@ graph TD
     subgraph "Backend Microservices"
         LS["🔐 Login Service<br>:8081<br><br>• POST /api/auth/register<br>• POST /api/auth/login<br>• GET  /api/auth/me"]
         PS["📁 Project Service<br>:8082<br><br>• CRUD /api/projects (owner only)<br>• GET/POST /api/projects/{id}/repositories<br>• DELETE /api/projects/{id}/repositories/{rId}<br>• POST /api/projects/{id}/repositories/{rId}/scan<br>• GET  /api/projects/{id}/dashboard"]
-        SCS["🔍 Scan Service<br>:8083<br><br>• POST /api/scans/analyze (202)<br>• GET  /api/scans/{scanId}/status<br>• GET  /api/scans/repositories/{rId}/history<br>• GET  /api/scans/projects/{id}/vulnerabilities<br>• GET/PATCH /api/scans/vulnerabilities/{id}[/status]<br>• POST /api/scans/vulnerabilities/{id}/suggestion/regenerate<br>• GET  /api/scans/dashboard/projects/{id}/summary"]
+        SCS["🔍 Scan Service<br>:8083 (results scoped to the JWT user)<br><br>• POST /api/scans/analyze (202)<br>• GET  /api/scans/{scanId}/status<br>• GET  /api/scans/repositories/{rId}/history<br>• GET  /api/scans/projects/{id}/vulnerabilities<br>• GET/PATCH /api/scans/vulnerabilities/{id}[/status]<br>• POST /api/scans/vulnerabilities/{id}/suggestion/regenerate<br>• GET  /api/scans/dashboard/projects/{id}/summary"]
     end
 
     subgraph "Databases (Amazon RDS MySQL)"

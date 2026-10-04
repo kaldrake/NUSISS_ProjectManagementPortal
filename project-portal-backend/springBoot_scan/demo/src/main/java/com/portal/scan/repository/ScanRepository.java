@@ -25,6 +25,11 @@ public interface ScanRepository extends JpaRepository<Scan, Long> {
     Optional<Scan> findTopByRepositoryIdOrderByStartedAtDesc(Long repositoryId);
 
     Optional<Scan> findTopByProjectIdOrderByStartedAtDesc(Long projectId);
+
+    // Owner-scoped variants: a user only ever sees scans they triggered
+    List<Scan> findByRepositoryIdAndOwnerIdOrderByStartedAtDesc(Long repositoryId, Long ownerId);
+
+    Optional<Scan> findTopByProjectIdAndOwnerIdOrderByStartedAtDesc(Long projectId, Long ownerId);
     
     List<Scan> findByScanStatus(String scanStatus);
     

@@ -21,6 +21,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import com.portal.scan.dto.ScanRequestDTO;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -63,8 +67,12 @@ class ScanServiceTest {
     @InjectMocks
     private ScanService scanService;
 
+    private static final Long USER = 1L;
+    private static final Long OTHER_USER = 2L;
+
     private Vulnerability vulnerability(Long id, String severity) {
         Vulnerability v = new Vulnerability();
+        v.setScan(scan(100L, Scan.STATUS_COMPLETED));
         v.setId(id);
         v.setSeverity(severity);
         v.setMessage("some finding");
@@ -76,6 +84,7 @@ class ScanServiceTest {
         Scan s = new Scan();
         s.setId(id);
         s.setScanStatus(status);
+        s.setOwnerId(USER);
         s.setStartedAt(LocalDateTime.of(2026, 10, 1, 12, 0));
         return s;
     }
@@ -84,15 +93,15 @@ class ScanServiceTest {
 
     @Test
     void getDashboardSummary_countsEachSeverity() {
-        when(vulnerabilityRepository.findLatestByProjectId(1L)).thenReturn(List.of(
+        when(vulnerabilityRepository.findLatestByProjectId(1L, USER)).thenReturn(List.of(
                 vulnerability(1L, "BLOCKER"),
                 vulnerability(2L, "CRITICAL"), vulnerability(3L, "CRITICAL"),
                 vulnerability(4L, "MAJOR"),
                 vulnerability(5L, "MINOR"),
                 vulnerability(6L, "INFO")));
-        when(scanRepository.findTopByProjectIdOrderByStartedAtDesc(1L)).thenReturn(Optional.empty());
+        when(scanRepository.findTopByProjectIdAndOwnerIdOrderByStartedAtDesc(1L, USER)).thenReturn(Optional.empty());
 
-        DashboardSummaryDTO dto = scanService.getDashboardSummary(1L);
+        DashboardSummaryDTO dto = scanService.getDashboardSummary(1L, USER);
 
         assertEquals(6, dto.getTotalVulnerabilities());
         assertEquals(1, dto.getBlockerCount());
@@ -105,10 +114,10 @@ class ScanServiceTest {
     @Test
     void getDashboardSummary_includesLatestScanDetails() {
         Scan latest = scan(5L, Scan.STATUS_COMPLETED);
-        when(vulnerabilityRepository.findLatestByProjectId(1L)).thenReturn(List.of());
-        when(scanRepository.findTopByProjectIdOrderByStartedAtDesc(1L)).thenReturn(Optional.of(latest));
+        when(vulnerabilityRepository.findLatestByProjectId(1L, USER)).thenReturn(List.of());
+        when(scanRepository.findTopByProjectIdAndOwnerIdOrderByStartedAtDesc(1L, USER)).thenReturn(Optional.of(latest));
 
-        DashboardSummaryDTO dto = scanService.getDashboardSummary(1L);
+        DashboardSummaryDTO dto = scanService.getDashboardSummary(1L, USER);
 
         assertEquals(LocalDateTime.of(2026, 10, 1, 12, 0), dto.getLastScanAt());
         assertEquals(Scan.STATUS_COMPLETED, dto.getLastScanStatus());
@@ -116,10 +125,10 @@ class ScanServiceTest {
 
     @Test
     void getDashboardSummary_hasNoLastScan_whenProjectNeverScanned() {
-        when(vulnerabilityRepository.findLatestByProjectId(1L)).thenReturn(List.of());
-        when(scanRepository.findTopByProjectIdOrderByStartedAtDesc(1L)).thenReturn(Optional.empty());
+        when(vulnerabilityRepository.findLatestByProjectId(1L, USER)).thenReturn(List.of());
+        when(scanRepository.findTopByProjectIdAndOwnerIdOrderByStartedAtDesc(1L, USER)).thenReturn(Optional.empty());
 
-        DashboardSummaryDTO dto = scanService.getDashboardSummary(1L);
+        DashboardSummaryDTO dto = scanService.getDashboardSummary(1L, USER);
 
         assertEquals(0, dto.getTotalVulnerabilities());
         assertNull(dto.getLastScanAt());
@@ -134,7 +143,7 @@ class ScanServiceTest {
         when(vulnerabilityRepository.findByScanId(9L)).thenReturn(List.of(
                 vulnerability(1L, "BLOCKER"), vulnerability(2L, "MAJOR"), vulnerability(3L, "CRITICAL")));
 
-        ScanStatusDTO dto = scanService.getScanStatus(9L);
+        ScanStatusDTO dto = scanService.getScanStatus(9L, USER);
 
         assertEquals(9L, dto.getScanId());
         assertEquals(Scan.STATUS_SCANNING, dto.getStatus());
@@ -146,7 +155,7 @@ class ScanServiceTest {
     void getScanStatus_throws_whenScanDoesNotExist() {
         when(scanRepository.findById(9L)).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> scanService.getScanStatus(9L));
+        assertThrows(RuntimeException.class, () -> scanService.getScanStatus(9L, USER));
     }
 
     @Test
@@ -155,11 +164,11 @@ class ScanServiceTest {
         summary.setTotalVulnerabilities(10);
         summary.setBlockerCount(2);
         summary.setCriticalCount(3);
-        when(scanRepository.findByRepositoryIdOrderByStartedAtDesc(4L))
+        when(scanRepository.findByRepositoryIdAndOwnerIdOrderByStartedAtDesc(4L, USER))
                 .thenReturn(List.of(scan(7L, Scan.STATUS_COMPLETED)));
         when(scanSummaryRepository.findByScanId(7L)).thenReturn(Optional.of(summary));
 
-        List<ScanHistoryDTO> history = scanService.getScanHistory(4L);
+        List<ScanHistoryDTO> history = scanService.getScanHistory(4L, USER);
 
         assertEquals(1, history.size());
         assertEquals(10, history.get(0).getVulnerabilityCount());
@@ -169,13 +178,13 @@ class ScanServiceTest {
 
     @Test
     void getScanHistory_fallsBackToCountingRows_whenNoSummary() {
-        when(scanRepository.findByRepositoryIdOrderByStartedAtDesc(4L))
+        when(scanRepository.findByRepositoryIdAndOwnerIdOrderByStartedAtDesc(4L, USER))
                 .thenReturn(List.of(scan(7L, Scan.STATUS_COMPLETED)));
         when(scanSummaryRepository.findByScanId(7L)).thenReturn(Optional.empty());
         when(vulnerabilityRepository.findByScanId(7L)).thenReturn(List.of(
                 vulnerability(1L, "CRITICAL"), vulnerability(2L, "MINOR"), vulnerability(3L, "MINOR")));
 
-        List<ScanHistoryDTO> history = scanService.getScanHistory(4L);
+        List<ScanHistoryDTO> history = scanService.getScanHistory(4L, USER);
 
         assertEquals(3, history.get(0).getVulnerabilityCount());
         assertEquals(1, history.get(0).getCriticalCount());
@@ -183,19 +192,19 @@ class ScanServiceTest {
 
     @Test
     void getScanHistory_returnsEmptyList_whenRepositoryHasNoScans() {
-        when(scanRepository.findByRepositoryIdOrderByStartedAtDesc(4L)).thenReturn(List.of());
+        when(scanRepository.findByRepositoryIdAndOwnerIdOrderByStartedAtDesc(4L, USER)).thenReturn(List.of());
 
-        assertEquals(0, scanService.getScanHistory(4L).size());
+        assertEquals(0, scanService.getScanHistory(4L, USER).size());
     }
 
     // ---------------------------------------------------------------- vulnerabilities
 
     @Test
     void getVulnerabilitiesForProject_mapsLatestScanFindingsToDtos() {
-        when(vulnerabilityRepository.findLatestByProjectId(1L))
+        when(vulnerabilityRepository.findLatestByProjectId(1L, USER))
                 .thenReturn(List.of(vulnerability(1L, "CRITICAL"), vulnerability(2L, "MAJOR")));
 
-        List<VulnerabilityDTO> result = scanService.getVulnerabilitiesForProject(1L);
+        List<VulnerabilityDTO> result = scanService.getVulnerabilitiesForProject(1L, USER);
 
         assertEquals(2, result.size());
         assertEquals("CRITICAL", result.get(0).getSeverity());
@@ -212,7 +221,7 @@ class ScanServiceTest {
         v.setAiSuggestion(suggestion);
         when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.of(v));
 
-        VulnerabilityDTO dto = scanService.getVulnerabilityById(1L);
+        VulnerabilityDTO dto = scanService.getVulnerabilityById(1L, USER);
 
         assertNotNull(dto.getAiSuggestion());
         assertEquals("use a prepared statement", dto.getAiSuggestion().getSuggestionText());
@@ -223,14 +232,14 @@ class ScanServiceTest {
     void getVulnerabilityById_hasNoSuggestion_forLowSeverityFinding() {
         when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.of(vulnerability(1L, "MINOR")));
 
-        assertNull(scanService.getVulnerabilityById(1L).getAiSuggestion());
+        assertNull(scanService.getVulnerabilityById(1L, USER).getAiSuggestion());
     }
 
     @Test
     void getVulnerabilityById_throws_whenMissing() {
         when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> scanService.getVulnerabilityById(1L));
+        assertThrows(RuntimeException.class, () -> scanService.getVulnerabilityById(1L, USER));
     }
 
     @Test
@@ -238,7 +247,7 @@ class ScanServiceTest {
         Vulnerability v = vulnerability(1L, "CRITICAL");
         when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.of(v));
 
-        scanService.updateVulnerabilityStatus(1L, "RESOLVED");
+        scanService.updateVulnerabilityStatus(1L, "RESOLVED", USER);
 
         assertEquals("RESOLVED", v.getStatus());
         verify(vulnerabilityRepository).save(v);
@@ -248,7 +257,7 @@ class ScanServiceTest {
     void updateVulnerabilityStatus_throwsAndSavesNothing_whenMissing() {
         when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> scanService.updateVulnerabilityStatus(1L, "RESOLVED"));
+        assertThrows(RuntimeException.class, () -> scanService.updateVulnerabilityStatus(1L, "RESOLVED", USER));
 
         verify(vulnerabilityRepository, never()).save(any(Vulnerability.class));
     }
@@ -264,7 +273,7 @@ class ScanServiceTest {
         when(aiSuggestionRouter.generateFixSuggestion(v)).thenReturn(result);
         when(aiSuggestionRouter.getModelUsed(result)).thenReturn("gemini-test");
 
-        AiSuggestionDTO dto = scanService.regenerateSuggestion(1L);
+        AiSuggestionDTO dto = scanService.regenerateSuggestion(1L, USER);
 
         assertEquals("fix it", dto.getSuggestionText());
         assertEquals("int x = 1;", dto.getCodeExample());
@@ -285,7 +294,7 @@ class ScanServiceTest {
         when(aiSuggestionRouter.generateFixSuggestion(v)).thenReturn(result);
         when(aiSuggestionRouter.getModelUsed(result)).thenReturn("fallback-template");
 
-        AiSuggestionDTO dto = scanService.regenerateSuggestion(1L);
+        AiSuggestionDTO dto = scanService.regenerateSuggestion(1L, USER);
 
         assertEquals(42L, dto.getId());
         assertEquals("new text", existing.getSuggestionText());
@@ -296,8 +305,127 @@ class ScanServiceTest {
     void regenerateSuggestion_throwsAndCallsNoAi_whenVulnerabilityMissing() {
         when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThrows(RuntimeException.class, () -> scanService.regenerateSuggestion(1L));
+        assertThrows(RuntimeException.class, () -> scanService.regenerateSuggestion(1L, USER));
 
         verify(aiSuggestionRouter, never()).generateFixSuggestion(any(Vulnerability.class));
+    }
+
+    // ---------------------------------------------------------------- ownership (per-user access)
+
+    @Test
+    void getScanStatus_throws403_forNonOwner() {
+        when(scanRepository.findById(9L)).thenReturn(Optional.of(scan(9L, Scan.STATUS_COMPLETED)));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> scanService.getScanStatus(9L, OTHER_USER));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void getScanStatus_throws403_whenUserIdIsNull() {
+        when(scanRepository.findById(9L)).thenReturn(Optional.of(scan(9L, Scan.STATUS_COMPLETED)));
+
+        assertThrows(ResponseStatusException.class, () -> scanService.getScanStatus(9L, null));
+    }
+
+    @Test
+    void getScanStatus_throws403_forLegacyScanWithoutOwner() {
+        Scan legacy = scan(9L, Scan.STATUS_COMPLETED);
+        legacy.setOwnerId(null);
+        when(scanRepository.findById(9L)).thenReturn(Optional.of(legacy));
+
+        assertThrows(ResponseStatusException.class, () -> scanService.getScanStatus(9L, USER));
+    }
+
+    @Test
+    void getVulnerabilitiesForScan_throws403AndReadsNothing_forNonOwner() {
+        when(scanRepository.findById(9L)).thenReturn(Optional.of(scan(9L, Scan.STATUS_COMPLETED)));
+
+        assertThrows(ResponseStatusException.class, () -> scanService.getVulnerabilitiesForScan(9L, OTHER_USER));
+
+        verify(vulnerabilityRepository, never()).findByScanId(9L);
+    }
+
+    @Test
+    void getVulnerabilityById_throws403_forNonOwner() {
+        when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.of(vulnerability(1L, "CRITICAL")));
+
+        assertThrows(ResponseStatusException.class, () -> scanService.getVulnerabilityById(1L, OTHER_USER));
+    }
+
+    @Test
+    void updateVulnerabilityStatus_throws403AndSavesNothing_forNonOwner() {
+        Vulnerability v = vulnerability(1L, "CRITICAL");
+        when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.of(v));
+
+        assertThrows(ResponseStatusException.class,
+                () -> scanService.updateVulnerabilityStatus(1L, "RESOLVED", OTHER_USER));
+
+        assertEquals("OPEN", v.getStatus());
+        verify(vulnerabilityRepository, never()).save(any(Vulnerability.class));
+    }
+
+    @Test
+    void regenerateSuggestion_throws403AndCallsNoAi_forNonOwner() {
+        when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.of(vulnerability(1L, "CRITICAL")));
+
+        assertThrows(ResponseStatusException.class, () -> scanService.regenerateSuggestion(1L, OTHER_USER));
+
+        verify(aiSuggestionRouter, never()).generateFixSuggestion(any(Vulnerability.class));
+    }
+
+    // ---------------------------------------------------------------- scan creation and async run
+
+    private ScanRequestDTO scanRequest() {
+        ScanRequestDTO request = new ScanRequestDTO();
+        request.setProjectId(10L);
+        request.setRepositoryId(100L);
+        request.setRepositoryUrl("https://github.com/acme/app.git");
+        request.setBranch("main");
+        return request;
+    }
+
+    @Test
+    void createScan_savesPendingScanOwnedByCaller() {
+        when(scanRepository.save(any(Scan.class))).thenAnswer(inv -> {
+            Scan saved = inv.getArgument(0);
+            saved.setId(55L);
+            return saved;
+        });
+
+        Scan created = scanService.createScan(scanRequest(), USER);
+
+        assertEquals(55L, created.getId());
+        assertEquals(USER, created.getOwnerId());
+        assertEquals(10L, created.getProjectId());
+        assertEquals(Scan.STATUS_PENDING, created.getScanStatus());
+    }
+
+    @Test
+    void runScan_marksScanCompleted_whenAnalysisSucceeds() throws Exception {
+        Scan pending = scan(55L, Scan.STATUS_PENDING);
+        when(scanRepository.findById(55L)).thenReturn(Optional.of(pending));
+        when(scanRepository.save(any(Scan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(sonarQubeScanner.scanRepository(any(), any(), any())).thenReturn(List.of());
+
+        scanService.runScan(55L, scanRequest());
+
+        assertEquals(Scan.STATUS_COMPLETED, pending.getScanStatus());
+        assertNotNull(pending.getCompletedAt());
+        verify(scanSummaryRepository).save(any(ScanSummary.class));
+    }
+
+    @Test
+    void runScan_marksScanFailedWithMessage_whenAnalysisThrows() throws Exception {
+        Scan pending = scan(55L, Scan.STATUS_PENDING);
+        when(scanRepository.findById(55L)).thenReturn(Optional.of(pending));
+        when(scanRepository.save(any(Scan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(sonarQubeScanner.scanRepository(any(), any(), any())).thenThrow(new RuntimeException("clone failed"));
+
+        scanService.runScan(55L, scanRequest());
+
+        assertEquals(Scan.STATUS_FAILED, pending.getScanStatus());
+        assertEquals("clone failed", pending.getErrorMessage());
     }
 }

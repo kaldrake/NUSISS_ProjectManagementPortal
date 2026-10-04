@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Arrays;
 import java.util.List;
@@ -48,11 +49,13 @@ public class GitHubService {
                     .collect(Collectors.toList());
             }
             
-            return getMockRepositories();
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "GitHub returned an unexpected response");
             
+        } catch (ResponseStatusException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to fetch GitHub repositories: {}", e.getMessage());
-            return getMockRepositories();
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to fetch GitHub repositories");
         }
     }
     
@@ -81,34 +84,6 @@ public class GitHubService {
             log.error("Failed to validate repository URL: {}", e.getMessage());
             return false;
         }
-    }
-    
-    private List<GitHubRepositoryDTO> getMockRepositories() {
-        log.info("Returning mock repositories for testing");
-        
-        GitHubRepositoryDTO repo1 = new GitHubRepositoryDTO();
-        repo1.setId(1L);
-        repo1.setName("demo-repo-1");
-        repo1.setFullName("demo/demo-repo-1");
-        repo1.setHtmlUrl("https://github.com/demo/demo-repo-1");
-        repo1.setCloneUrl("https://github.com/demo/demo-repo-1.git");
-        repo1.setDefaultBranch("main");
-        repo1.setIsPrivate(false);
-        repo1.setDescription("Demo repository 1 for testing");
-        repo1.setLanguage("Java");
-        
-        GitHubRepositoryDTO repo2 = new GitHubRepositoryDTO();
-        repo2.setId(2L);
-        repo2.setName("demo-repo-2");
-        repo2.setFullName("demo/demo-repo-2");
-        repo2.setHtmlUrl("https://github.com/demo/demo-repo-2");
-        repo2.setCloneUrl("https://github.com/demo/demo-repo-2.git");
-        repo2.setDefaultBranch("main");
-        repo2.setIsPrivate(false);
-        repo2.setDescription("Demo repository 2 for testing");
-        repo2.setLanguage("TypeScript");
-        
-        return List.of(repo1, repo2);
     }
     
     private GitHubRepositoryDTO convertToDTO(GitHubRepo repo) {

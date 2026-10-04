@@ -18,6 +18,9 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /** Request attribute holding the userId claim of the validated JWT. */
+    public static final String USER_ID_ATTRIBUTE = "userId";
+
     @Autowired private JwtUtil jwtUtil;
 
     @Override
@@ -38,6 +41,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                 username, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+                // Exposed so controllers can scope data to the calling user (never trust a client header)
+                request.setAttribute(USER_ID_ATTRIBUTE, jwtUtil.extractUserId(token));
             }
         } catch (Exception ignored) {}
         filterChain.doFilter(request, response);
