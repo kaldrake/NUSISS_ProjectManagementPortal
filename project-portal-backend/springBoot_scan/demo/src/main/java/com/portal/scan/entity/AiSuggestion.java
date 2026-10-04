@@ -3,6 +3,7 @@ package com.portal.scan.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "ai_suggestions")
@@ -32,7 +33,7 @@ public class AiSuggestion {
     private LocalDateTime generatedAt;
     
     public AiSuggestion() {
-        this.generatedAt = LocalDateTime.now();
+        this.generatedAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     public AiSuggestion(Vulnerability vulnerability, String suggestionText, String codeExample) {
@@ -40,7 +41,7 @@ public class AiSuggestion {
         this.suggestionText = suggestionText;
         this.codeExample = codeExample;
         this.confidenceScore = 0.85;
-        this.generatedAt = LocalDateTime.now();
+        this.generatedAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     // Getters and Setters

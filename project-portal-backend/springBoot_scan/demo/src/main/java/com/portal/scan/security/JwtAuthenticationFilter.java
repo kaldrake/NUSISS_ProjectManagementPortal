@@ -44,7 +44,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // Exposed so controllers can scope data to the calling user (never trust a client header)
                 request.setAttribute(USER_ID_ATTRIBUTE, jwtUtil.extractUserId(token));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            // An unreadable or invalid token leaves the request unauthenticated; the entry point answers 401
+            logger.debug("JWT not accepted: " + e.getMessage());
+        }
         filterChain.doFilter(request, response);
     }
 }

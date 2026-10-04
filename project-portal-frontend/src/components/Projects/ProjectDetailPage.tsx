@@ -47,7 +47,7 @@ const ProjectDetailPage: React.FC = () => {
   }, [projectId]);
 
   useEffect(() => {
-    fetchProjectData();
+    void fetchProjectData();
   }, [fetchProjectData]);
 
   const handleDeleteProject = async () => {
@@ -60,18 +60,19 @@ const ProjectDetailPage: React.FC = () => {
       toast.success('Project deleted successfully');
       navigate('/projects');
     } catch (err) {
+      console.error('Failed to delete project:', err);
       toast.error('Failed to delete project');
     }
   };
 
   const handleRepositoryAdded = () => {
-    fetchProjectData();
+    void fetchProjectData();
     setIsAddRepoModalOpen(false);
     toast.success('Repository added successfully');
   };
 
   const handleScanTriggered = () => {
-    fetchProjectData();
+    void fetchProjectData();
   };
 
   if (loading) {
@@ -182,15 +183,15 @@ const ProjectDetailPage: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Project Settings</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Project ID</label>
+                <span className="block text-sm font-medium text-gray-700 mb-1">Project ID</span>
                 <code className="text-sm bg-gray-100 px-2 py-1 rounded">{project.id}</code>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Created</label>
+                <span className="block text-sm font-medium text-gray-700 mb-1">Created</span>
                 <p className="text-gray-600">{new Date(project.createdAt).toLocaleString()}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Updated</label>
+                <span className="block text-sm font-medium text-gray-700 mb-1">Last Updated</span>
                 <p className="text-gray-600">
                   {project.updatedAt ? new Date(project.updatedAt).toLocaleString() : 'Never'}
                 </p>

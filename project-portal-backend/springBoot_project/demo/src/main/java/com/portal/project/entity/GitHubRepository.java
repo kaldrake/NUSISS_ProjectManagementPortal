@@ -3,6 +3,7 @@ package com.portal.project.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "repositories")
@@ -44,7 +45,7 @@ public class GitHubRepository {
     
     // Constructors
     public GitHubRepository() {
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     public GitHubRepository(Long projectId, Long githubRepoId, String repoName, 
@@ -57,7 +58,7 @@ public class GitHubRepository {
         this.cloneUrl = cloneUrl;
         this.defaultBranch = "main";
         this.isActive = true;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     // Getters and Setters

@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -385,5 +386,109 @@ class ProjectServiceTest {
         projectService.triggerScan(PROJECT_ID, REPO_ID, "jwt");
 
         verify(gitHubRepositoryRepository, never()).updateLastScanAt(anyLong(), any(LocalDateTime.class));
+    }
+
+    @Test
+    void assertProjectOwner_passes_forTheOwner() {
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(ownedProject()));
+
+        assertDoesNotThrow(() -> projectService.assertProjectOwner(PROJECT_ID, OWNER));
+    }
+
+    @Test
+    void getProjectById_answers404_whenTheProjectDoesNotExist() {
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> projectService.getProjectById(PROJECT_ID, OWNER));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    }
+
+    @Test
+    void duplicateProjectName_answers409() {
+        ProjectCreateDTO dto = new ProjectCreateDTO();
+        dto.setName("Portal");
+        when(projectRepository.existsByNameAndOwnerId("Portal", OWNER)).thenReturn(true);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> projectService.createProject(dto, OWNER));
+
+        assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+    }
+
+    @Test
+    void updateAndDelete_answer403_forNonOwners() {
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(ownedProject()));
+
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> projectService.updateProject(PROJECT_ID, new ProjectUpdateDTO(), OTHER_USER)).getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(ResponseStatusException.class,
+                () -> projectService.deleteProject(PROJECT_ID, OTHER_USER)).getStatusCode());
+    }
+
+    @Test
+    void updateProject_keepsTheNameWhenOnlyTheDescriptionChanges() {
+        ProjectUpdateDTO dto = new ProjectUpdateDTO();
+        dto.setDescription("only text");
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(ownedProject()));
+        when(projectRepository.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProjectResponseDTO result = projectService.updateProject(PROJECT_ID, dto, OWNER);
+
+        assertEquals("Portal", result.getName());
+        assertEquals("only text", result.getDescription());
+    }
+
+    @Test
+    void getProjectRepositories_returnsTheProjectsRepositories_forTheOwner() {
+        GitHubRepository repo = repositoryOf(PROJECT_ID);
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(ownedProject()));
+        when(gitHubRepositoryRepository.findByProjectId(PROJECT_ID)).thenReturn(List.of(repo));
+
+        List<GitHubRepositoryDTO> result = projectService.getProjectRepositories(PROJECT_ID, OWNER);
+
+        assertEquals(1, result.size());
+        assertEquals(REPO_ID, result.get(0).getId());
+    }
+
+    @Test
+    void removeRepository_answers404_whenTheRepositoryDoesNotExist() {
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(ownedProject()));
+        when(gitHubRepositoryRepository.findById(REPO_ID)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> projectService.removeRepository(REPO_ID, PROJECT_ID, OWNER));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    }
+
+    @Test
+    void triggerScan_doesNothing_whenTheRepositoryDoesNotExist() {
+        when(gitHubRepositoryRepository.findById(REPO_ID)).thenReturn(Optional.empty());
+
+        projectService.triggerScan(PROJECT_ID, REPO_ID, "jwt");
+
+        verifyNoInteractions(scanServiceClient);
+    }
+
+    @Test
+    void getProjectDashboardSummary_returnsTheScanServiceSummary_forTheOwner() {
+        com.portal.project.dto.DashboardSummaryDTO summary = new com.portal.project.dto.DashboardSummaryDTO();
+        when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(ownedProject()));
+        when(scanServiceClient.getDashboardSummary(PROJECT_ID)).thenReturn(summary);
+
+        assertEquals(summary, projectService.getProjectDashboardSummary(PROJECT_ID, OWNER));
+    }
+
+    @Test
+    void getProjectsByOwner_reportsZeroCounts_whenTheScanServiceReturnsNull() {
+        when(projectRepository.findByOwnerId(OWNER)).thenReturn(List.of(ownedProject()));
+        when(scanServiceClient.getVulnerabilitiesByProjectId(PROJECT_ID)).thenReturn(null);
+
+        List<ProjectResponseDTO> result = projectService.getProjectsByOwner(OWNER);
+
+        assertEquals(0, result.get(0).getVulnerabilityCount());
+        assertEquals(0, result.get(0).getCriticalCount());
     }
 }

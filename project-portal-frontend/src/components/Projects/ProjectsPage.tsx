@@ -42,7 +42,7 @@ const ProjectsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchProjects();
+    void fetchProjects();
 
     // Use locationState instead of location.state
     if (locationState?.openModal) {
@@ -53,7 +53,7 @@ const ProjectsPage: React.FC = () => {
   }, [location, locationState, fetchProjects, navigate]);  // ← Fixed dependencies
 
   const handleProjectCreated = () => {
-    fetchProjects();
+    void fetchProjects();
     setIsCreateModalOpen(false);
   };
 
@@ -67,8 +67,9 @@ const ProjectsPage: React.FC = () => {
     try {
       await projectService.deleteProject(projectId);
       toast.success('Project deleted successfully');
-      fetchProjects();
+      void fetchProjects();
     } catch (err) {
+      console.error('Failed to delete project:', err);
       toast.error('Failed to delete project');
     }
   };

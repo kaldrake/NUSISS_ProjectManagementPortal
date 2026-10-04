@@ -1,5 +1,6 @@
 package com.portal.scan.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -28,6 +29,18 @@ public class GeminiService {
 
 	private static final Logger log = LoggerFactory.getLogger(GeminiService.class);
 
+	private static final String PARTS = "parts";
+	private static final String CANDIDATES = "candidates";
+
+	// Confidence assigned whenever we couldn't get a real, complete answer from the model.
+	private static final double FALLBACK_CONFIDENCE = 0.2;
+	// Confidence for text salvaged from JSON that was cut off or wasn't JSON at all.
+	private static final double SALVAGED_CONFIDENCE = 0.35;
+	private static final int LOG_PREVIEW_LENGTH = 500;
+
+	private static final Pattern EXPLANATION_FIELD = Pattern.compile("\"explanation\"\\s*:\\s*\"([^\"]*)");
+	private static final Pattern STEPS_FIELD = Pattern.compile("\"steps\"\\s*:\\s*\"([^\"]*)");
+
 	@Value("${gemini.api.key:}")
 	private String apiKey;
 
@@ -40,111 +53,136 @@ public class GeminiService {
 	private final RestTemplate restTemplate = new RestTemplate();
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
-	// Confidence assigned whenever we couldn't get a real, complete answer from the model.
-	private static final double FALLBACK_CONFIDENCE = 0.2;
-
 	public String getModel() {
 		return model;
 	}
 
 	public AiSuggestionResult generateFixSuggestion(Vulnerability vulnerability) {
-
 		log.info("in generate fix suggestion (gemini)");
 		if (apiKey == null || apiKey.isEmpty()) {
 			log.warn("Gemini API key not configured, returning default suggestion");
-			return new AiSuggestionResult(FallbackSuggestionTemplates.forVulnerability(vulnerability), "", FALLBACK_CONFIDENCE, true);
+			return fallback(vulnerability);
 		}
-
-		String prompt = buildPrompt(vulnerability);
 
 		try {
-			// contents[0].parts[0].text + generationConfig.responseMimeType=application/json —
-			// built via Jackson (not string interpolation) so prompt text is escaped correctly.
-			ObjectNode requestRoot = objectMapper.createObjectNode();
-			ArrayNode contents = requestRoot.putArray("contents");
-			ObjectNode contentEntry = contents.addObject();
-			ArrayNode parts = contentEntry.putArray("parts");
-			parts.addObject().put("text", prompt);
-
-			ObjectNode generationConfig = requestRoot.putObject("generationConfig");
-			generationConfig.put("temperature", 0.3);
-			// 600 was cutting JSON responses off mid-string on gemini-flash-latest —
-			// raised so the model has room to finish the object before hitting the cap.
-			generationConfig.put("maxOutputTokens", 2048);
-			generationConfig.put("responseMimeType", "application/json");
-
-			String url = UriComponentsBuilder.fromHttpUrl(apiBaseUrl + "/" + model + ":generateContent")
-					.queryParam("key", apiKey)
-					.toUriString();
-
-			HttpHeaders headers = new HttpHeaders();
-			headers.setContentType(MediaType.APPLICATION_JSON);
-
-			HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestRoot), headers);
-			ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-
-			String rawBody = response.getBody();
-			JsonNode root;
-			try {
-				root = objectMapper.readTree(rawBody);
-			} catch (Exception parseEx) {
-				log.warn("Gemini HTTP response body was not valid JSON (status={}), raw body: {}", response.getStatusCode(),
-						rawBody != null && rawBody.length() > 500 ? rawBody.substring(0, 500) + "...(truncated)" : rawBody);
-				throw parseEx;
-			}
-			JsonNode candidates = root.path("candidates");
-			if (!candidates.isArray() || candidates.isEmpty()) {
-				// e.g. blocked by promptFeedback.blockReason — no candidate to read
-				throw new IllegalStateException("Gemini returned no candidates: " + root.path("promptFeedback"));
-			}
-
-			JsonNode candidate = candidates.get(0);
+			ResponseEntity<String> response = restTemplate.exchange(requestUrl(), HttpMethod.POST,
+					requestEntity(buildPrompt(vulnerability)), String.class);
+			JsonNode candidate = firstCandidate(readEnvelope(response));
 			String finishReason = candidate.path("finishReason").asText("STOP");
-			String rawContent = candidate.path("content").path("parts").get(0).path("text").asText();
-			String content = stripJsonFence(rawContent);
-
-			// The envelope is JSON; "text" is itself a JSON string because of
-			// responseMimeType above, so it needs a second parse pass. Gemini doesn't
-			// always honor responseMimeType and can return unstructured prose, or JSON
-			// truncated mid-string by maxOutputTokens — when the full object can't be
-			// parsed, salvage whatever field values are readable so the user sees real
-			// content instead of raw "{ "explanation": ..." syntax.
-			JsonNode parsed;
-			try {
-				parsed = objectMapper.readTree(content);
-			} catch (Exception parseEx) {
-				log.warn("Gemini did not return valid JSON (likely truncated), raw text: {}",
-						rawContent.length() > 500 ? rawContent.substring(0, 500) + "...(truncated)" : rawContent);
-				String salvaged = extractPartialJsonFields(content);
-				String plainTextSuggestion = salvaged != null ? salvaged
-						: (content.isBlank() ? rawContent.trim() : content.trim());
-				log.info("Generated AI suggestion (salvaged from incomplete JSON) for vulnerability: {} (confidence={})",
-						vulnerability.getId(), 0.35);
-				return new AiSuggestionResult(plainTextSuggestion, "", 0.35, false);
-			}
-			String explanation = parsed.path("explanation").asText("");
-			String steps = parsed.path("steps").asText("");
-			String suggestionText = (explanation + "\n\n" + steps).trim();
-			String codeExample = parsed.path("code_example").asText("");
-			double rawConfidence = parsed.path("confidence").asDouble(0.5);
-
-			double confidence = Math.max(0.0, Math.min(1.0, rawConfidence));
-			if ("MAX_TOKENS".equals(finishReason)) {
-				// Response got cut off — don't trust it as much as a complete answer.
-				confidence = Math.min(confidence, 0.5);
-			}
-			if (suggestionText.isBlank() || codeExample.isBlank()) {
-				// Model skipped a required field; the answer is incomplete.
-				confidence = Math.min(confidence, 0.4);
-			}
-
-			log.info("Generated AI suggestion for vulnerability: {} (confidence={})", vulnerability.getId(), confidence);
-			return new AiSuggestionResult(suggestionText, codeExample, confidence, false);
-
+			String rawContent = candidate.path("content").path(PARTS).get(0).path("text").asText();
+			return toSuggestion(rawContent, finishReason, vulnerability);
 		} catch (Exception e) {
 			log.error("Gemini API call failed: {}", e.getMessage());
-			return new AiSuggestionResult(FallbackSuggestionTemplates.forVulnerability(vulnerability), "", FALLBACK_CONFIDENCE, true);
+			return fallback(vulnerability);
 		}
+	}
+
+	private AiSuggestionResult fallback(Vulnerability vulnerability) {
+		return new AiSuggestionResult(FallbackSuggestionTemplates.forVulnerability(vulnerability), "", FALLBACK_CONFIDENCE, true);
+	}
+
+	private String requestUrl() {
+		return UriComponentsBuilder.fromHttpUrl(apiBaseUrl + "/" + model + ":generateContent")
+				.queryParam("key", apiKey)
+				.toUriString();
+	}
+
+	/**
+	 * contents[0].parts[0].text + generationConfig.responseMimeType=application/json —
+	 * built via Jackson (not string interpolation) so prompt text is escaped correctly.
+	 */
+	private HttpEntity<String> requestEntity(String prompt) throws JsonProcessingException {
+		ObjectNode requestRoot = objectMapper.createObjectNode();
+		ArrayNode contents = requestRoot.putArray("contents");
+		ObjectNode contentEntry = contents.addObject();
+		ArrayNode parts = contentEntry.putArray(PARTS);
+		parts.addObject().put("text", prompt);
+
+		ObjectNode generationConfig = requestRoot.putObject("generationConfig");
+		generationConfig.put("temperature", 0.3);
+		// 600 was cutting JSON responses off mid-string on gemini-flash-latest —
+		// raised so the model has room to finish the object before hitting the cap.
+		generationConfig.put("maxOutputTokens", 2048);
+		generationConfig.put("responseMimeType", "application/json");
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		return new HttpEntity<>(objectMapper.writeValueAsString(requestRoot), headers);
+	}
+
+	private JsonNode readEnvelope(ResponseEntity<String> response) throws JsonProcessingException {
+		String rawBody = response.getBody();
+		try {
+			return objectMapper.readTree(rawBody);
+		} catch (JsonProcessingException parseEx) {
+			log.warn("Gemini HTTP response body was not valid JSON (status={}), raw body: {}", response.getStatusCode(),
+					preview(rawBody));
+			throw parseEx;
+		}
+	}
+
+	private JsonNode firstCandidate(JsonNode root) {
+		JsonNode candidates = root.path(CANDIDATES);
+		if (!candidates.isArray() || candidates.isEmpty()) {
+			// e.g. blocked by promptFeedback.blockReason — no candidate to read
+			throw new IllegalStateException("Gemini returned no candidates: " + root.path("promptFeedback"));
+		}
+		return candidates.get(0);
+	}
+
+	/**
+	 * The envelope is JSON; "text" is itself a JSON string because of responseMimeType, so it needs a
+	 * second parse pass. Gemini doesn't always honor responseMimeType and can return unstructured prose,
+	 * or JSON truncated mid-string by maxOutputTokens — when the full object can't be parsed, salvage
+	 * whatever field values are readable so the user sees real content instead of raw JSON syntax.
+	 */
+	private AiSuggestionResult toSuggestion(String rawContent, String finishReason, Vulnerability vulnerability) {
+		String content = stripJsonFence(rawContent);
+		JsonNode parsed = parseJson(content);
+		if (parsed == null) {
+			log.warn("Gemini did not return valid JSON (likely truncated), raw text: {}", preview(rawContent));
+			String salvaged = extractPartialJsonFields(content);
+			String plainTextSuggestion = salvaged != null ? salvaged : plainText(content, rawContent);
+			log.info("Generated AI suggestion (salvaged from incomplete JSON) for vulnerability: {} (confidence={})",
+					vulnerability.getId(), SALVAGED_CONFIDENCE);
+			return new AiSuggestionResult(plainTextSuggestion, "", SALVAGED_CONFIDENCE, false);
+		}
+
+		String explanation = parsed.path("explanation").asText("");
+		String steps = parsed.path("steps").asText("");
+		String suggestionText = (explanation + "\n\n" + steps).trim();
+		String codeExample = parsed.path("code_example").asText("");
+		double confidence = Math.max(0.0, Math.min(1.0, parsed.path("confidence").asDouble(0.5)));
+		if ("MAX_TOKENS".equals(finishReason)) {
+			// Response got cut off — don't trust it as much as a complete answer.
+			confidence = Math.min(confidence, 0.5);
+		}
+		if (suggestionText.isBlank() || codeExample.isBlank()) {
+			// Model skipped a required field; the answer is incomplete.
+			confidence = Math.min(confidence, 0.4);
+		}
+
+		log.info("Generated AI suggestion for vulnerability: {} (confidence={})", vulnerability.getId(), confidence);
+		return new AiSuggestionResult(suggestionText, codeExample, confidence, false);
+	}
+
+	private JsonNode parseJson(String content) {
+		try {
+			return objectMapper.readTree(content);
+		} catch (JsonProcessingException e) {
+			return null;
+		}
+	}
+
+	private String plainText(String content, String rawContent) {
+		return content.isBlank() ? rawContent.trim() : content.trim();
+	}
+
+	private String preview(String text) {
+		if (text != null && text.length() > LOG_PREVIEW_LENGTH) {
+			return text.substring(0, LOG_PREVIEW_LENGTH) + "...(truncated)";
+		}
+		return text;
 	}
 
 	/**
@@ -170,9 +208,6 @@ public class GeminiService {
 		return trimmed;
 	}
 
-	private static final Pattern EXPLANATION_FIELD = Pattern.compile("\"explanation\"\\s*:\\s*\"([^\"]*)");
-	private static final Pattern STEPS_FIELD = Pattern.compile("\"steps\"\\s*:\\s*\"([^\"]*)");
-
 	/**
 	 * Best-effort recovery for JSON truncated mid-string by maxOutputTokens —
 	 * pulls out whatever text made it into "explanation"/"steps" before the cutoff,
@@ -180,9 +215,6 @@ public class GeminiService {
 	 * Returns null if neither field is present (nothing worth salvaging).
 	 */
 	private String extractPartialJsonFields(String text) {
-		if (text == null) {
-			return null;
-		}
 		String explanation = matchGroup(EXPLANATION_FIELD, text);
 		String steps = matchGroup(STEPS_FIELD, text);
 		if (explanation == null && steps == null) {
@@ -207,6 +239,8 @@ public class GeminiService {
 	}
 
 	private String buildPrompt(Vulnerability vulnerability) {
+		String type = vulnerability.getVulnerabilityType() != null ? vulnerability.getVulnerabilityType() : "Security Issue";
+		int line = vulnerability.getLineNumber() != null ? vulnerability.getLineNumber() : 0;
 		return String.format("""
 				You are a security expert. Analyze this vulnerability and respond with ONLY a JSON object
 				(no markdown, no prose outside the JSON) with these exact keys:
@@ -223,48 +257,6 @@ public class GeminiService {
 				Line: %d
 				Description: %s
 				""",
-				vulnerability.getVulnerabilityType() != null ? vulnerability.getVulnerabilityType() : "Security Issue",
-				vulnerability.getSeverity(), vulnerability.getFilePath(),
-				vulnerability.getLineNumber() != null ? vulnerability.getLineNumber() : 0, vulnerability.getMessage());
-	}
-
-	public boolean testConnection() {
-		if (apiKey == null || apiKey.isEmpty()) {
-			log.warn("Gemini API key not configured, cannot test connection");
-			return false;
-		}
-
-		try {
-			ObjectNode requestRoot = objectMapper.createObjectNode();
-			ArrayNode contents = requestRoot.putArray("contents");
-			ObjectNode contentEntry = contents.addObject();
-			ArrayNode parts = contentEntry.putArray("parts");
-			parts.addObject().put("text", "OK");
-
-			ObjectNode generationConfig = requestRoot.putObject("generationConfig");
-			generationConfig.put("maxOutputTokens", 5);
-
-			String url = UriComponentsBuilder.fromHttpUrl(apiBaseUrl + "/" + model + ":generateContent")
-					.queryParam("key", apiKey)
-					.toUriString();
-
-			HttpHeaders headers = new HttpHeaders();
-			headers.setContentType(MediaType.APPLICATION_JSON);
-
-			HttpEntity<String> entity = new HttpEntity<>(objectMapper.writeValueAsString(requestRoot), headers);
-			ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-
-			boolean success = response.getStatusCode().is2xxSuccessful();
-			if (success) {
-				log.info("Gemini API connection test successful");
-			} else {
-				log.warn("Gemini API connection test failed with status: {}", response.getStatusCode());
-			}
-			return success;
-
-		} catch (Exception e) {
-			log.error("Gemini connection test failed: {}", e.getMessage());
-			return false;
-		}
+				type, vulnerability.getSeverity(), vulnerability.getFilePath(), line, vulnerability.getMessage());
 	}
 }

@@ -8,39 +8,7 @@ import com.portal.scan.entity.Vulnerability;
  */
 public final class FallbackSuggestionTemplates {
 
-	private FallbackSuggestionTemplates() {
-	}
-
-	/**
-	 * Picks a canned remediation text by keyword in the finding message (used when no AI answer is available).
-	 */
-	public static String forVulnerability(Vulnerability vulnerability) {
-		String message = vulnerability.getMessage().toLowerCase();
-		String severity = vulnerability.getSeverity();
-
-		if (message.contains("sql") || message.contains("injection")) {
-			return getSqlInjectionSuggestion();
-		}
-		if (message.contains("hardcoded") || message.contains("password") || message.contains("credential")) {
-			return getHardcodedCredentialsSuggestion();
-		}
-		if (message.contains("null")) {
-			return getNullPointerSuggestion();
-		}
-		if (message.contains("path traversal") || message.contains("directory traversal")) {
-			return getPathTraversalSuggestion();
-		}
-		if (message.contains("xss") || message.contains("cross-site")) {
-			return getXssSuggestion();
-		}
-		if ("BLOCKER".equals(severity) || "CRITICAL".equals(severity)) {
-			return getCriticalSuggestion();
-		}
-		return getGenericSuggestion();
-	}
-
-	private static String getSqlInjectionSuggestion() {
-		return """
+	private static final String SQL_INJECTION = """
 				  **SQL Injection Prevention**
 
 				  **Risk:** SQL injection allows attackers to manipulate database queries, leading to data theft or destruction.
@@ -62,10 +30,8 @@ public final class FallbackSuggestionTemplates {
 				  PreparedStatement stmt = conn.prepareStatement(query);
 				  stmt.setInt(1, userId);
 				""";
-	}
 
-	private static String getHardcodedCredentialsSuggestion() {
-		return """
+	private static final String HARDCODED_CREDENTIALS = """
 				Remove Hardcoded Credentials
 
 				Risk: Hardcoded passwords in source code are easily discovered.
@@ -87,10 +53,8 @@ public final class FallbackSuggestionTemplates {
 				bash
 				export DB_PASSWORD=secure_password_123
 				""";
-	}
 
-	private static String getNullPointerSuggestion() {
-		return """
+	private static final String NULL_POINTER = """
 				Null Pointer Prevention
 
 				Risk: Null pointer exceptions cause application crashes.
@@ -116,10 +80,8 @@ public final class FallbackSuggestionTemplates {
 				    object.method();
 				}
 				""";
-	}
 
-	private static String getPathTraversalSuggestion() {
-		return """
+	private static final String PATH_TRAVERSAL = """
 				Path Traversal Prevention
 
 				Risk: Path traversal allows attackers to access unauthorized files.
@@ -143,10 +105,8 @@ public final class FallbackSuggestionTemplates {
 				    throw new SecurityException("Path traversal detected");
 				}
 				""";
-	}
 
-	private static String getXssSuggestion() {
-		return """
+	private static final String XSS = """
 				Cross-Site Scripting (XSS) Prevention
 
 				Risk: XSS allows attackers to inject malicious scripts into web pages.
@@ -171,10 +131,8 @@ public final class FallbackSuggestionTemplates {
 				String escaped = StringEscapeUtils.escapeHtml4(userInput);
 				out.print("<div>" + escaped + "</div>");
 				""";
-	}
 
-	private static String getCriticalSuggestion() {
-		return """
+	private static final String CRITICAL = """
 				Critical Security Issue Detected
 
 				Action Required Immediately:
@@ -189,10 +147,8 @@ public final class FallbackSuggestionTemplates {
 
 				Document the fix
 				""";
-	}
 
-	private static String getGenericSuggestion() {
-		return """
+	private static final String GENERIC = """
 				Security Fix Recommended
 
 				Steps to Resolve:
@@ -207,5 +163,36 @@ public final class FallbackSuggestionTemplates {
 
 				Document the changes made
 				""";
+
+	private FallbackSuggestionTemplates() {
 	}
+
+	/**
+	 * Picks a canned remediation text by keyword in the finding message (used when no AI answer is available).
+	 */
+	public static String forVulnerability(Vulnerability vulnerability) {
+		String message = vulnerability.getMessage().toLowerCase();
+		String severity = vulnerability.getSeverity();
+
+		if (message.contains("sql") || message.contains("injection")) {
+			return SQL_INJECTION;
+		}
+		if (message.contains("hardcoded") || message.contains("password") || message.contains("credential")) {
+			return HARDCODED_CREDENTIALS;
+		}
+		if (message.contains("null")) {
+			return NULL_POINTER;
+		}
+		if (message.contains("path traversal") || message.contains("directory traversal")) {
+			return PATH_TRAVERSAL;
+		}
+		if (message.contains("xss") || message.contains("cross-site")) {
+			return XSS;
+		}
+		if ("BLOCKER".equals(severity) || "CRITICAL".equals(severity)) {
+			return CRITICAL;
+		}
+		return GENERIC;
+	}
+
 }

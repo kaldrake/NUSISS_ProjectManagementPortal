@@ -3,6 +3,7 @@ package com.portal.scan.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,7 +32,7 @@ public class Scan {
     private String branch = "main";
     
     @Column(name = "scan_status", length = 20)
-    private String scanStatus = "PENDING";
+    private String scanStatus = STATUS_PENDING;
     
     @Column(name = "sonarqube_project_key")
     private String sonarqubeProjectKey;
@@ -58,8 +59,8 @@ public class Scan {
     public static final String STATUS_FAILED = "FAILED";
     
     public Scan() {
-        this.startedAt = LocalDateTime.now();
-        this.createdAt = LocalDateTime.now();
+        this.startedAt = LocalDateTime.now(ZoneId.systemDefault());
+        this.createdAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     public Scan(Long projectId, Long repositoryId, String repositoryUrl, String branch) {
@@ -68,8 +69,8 @@ public class Scan {
         this.repositoryUrl = repositoryUrl;
         this.branch = branch != null ? branch : "main";
         this.scanStatus = STATUS_PENDING;
-        this.startedAt = LocalDateTime.now();
-        this.createdAt = LocalDateTime.now();
+        this.startedAt = LocalDateTime.now(ZoneId.systemDefault());
+        this.createdAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     // Getters and Setters

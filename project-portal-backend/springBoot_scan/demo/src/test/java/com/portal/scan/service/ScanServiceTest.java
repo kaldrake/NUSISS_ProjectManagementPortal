@@ -14,6 +14,7 @@ import com.portal.scan.repository.ScanRepository;
 import com.portal.scan.repository.ScanSummaryRepository;
 import com.portal.scan.repository.VulnerabilityRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -427,5 +429,73 @@ class ScanServiceTest {
 
         assertEquals(Scan.STATUS_FAILED, pending.getScanStatus());
         assertEquals("clone failed", pending.getErrorMessage());
+    }
+
+    private SonarQubeIssue issue(String severity) {
+        SonarQubeIssue issue = new SonarQubeIssue();
+        issue.setRuleId("java:S1");
+        issue.setType("VULNERABILITY");
+        issue.setSeverity(severity);
+        issue.setFilePath("src/A.java");
+        issue.setLineNumber(3);
+        issue.setMessage("finding");
+        return issue;
+    }
+
+    @Test
+    void runScan_savesFindings_andAsksForAiSuggestionsOnlyForBlockerAndCritical() throws Exception {
+        Scan pending = scan(55L, Scan.STATUS_PENDING);
+        when(scanRepository.findById(55L)).thenReturn(Optional.of(pending));
+        when(scanRepository.save(any(Scan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(sonarQubeScanner.scanRepository(any(), any(), any())).thenReturn(List.of(issue("BLOCKER"), issue("MAJOR")));
+        when(aiSuggestionRouter.generateFixSuggestion(any(Vulnerability.class)))
+                .thenReturn(new AiSuggestionResult("fix", "code", 0.9, false));
+        when(aiSuggestionRouter.getModelUsed(any(AiSuggestionResult.class))).thenReturn("gemini-test");
+
+        scanService.runScan(55L, scanRequest());
+
+        verify(vulnerabilityRepository, times(2)).save(any(Vulnerability.class));
+        verify(aiSuggestionRouter, times(1)).generateFixSuggestion(any(Vulnerability.class));
+        verify(aiSuggestionRepository).save(any(AiSuggestion.class));
+        ArgumentCaptor<ScanSummary> summary = ArgumentCaptor.forClass(ScanSummary.class);
+        verify(scanSummaryRepository).save(summary.capture());
+        assertEquals(2, summary.getValue().getTotalVulnerabilities());
+        assertEquals(1, summary.getValue().getBlockerCount());
+        assertEquals(1, summary.getValue().getMajorCount());
+        assertEquals(Scan.STATUS_COMPLETED, pending.getScanStatus());
+    }
+
+    @Test
+    void runScan_stillCompletes_whenTheAiProviderFails() throws Exception {
+        Scan pending = scan(55L, Scan.STATUS_PENDING);
+        when(scanRepository.findById(55L)).thenReturn(Optional.of(pending));
+        when(scanRepository.save(any(Scan.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(sonarQubeScanner.scanRepository(any(), any(), any())).thenReturn(List.of(issue("CRITICAL")));
+        when(aiSuggestionRouter.generateFixSuggestion(any(Vulnerability.class))).thenThrow(new IllegalStateException("provider down"));
+
+        scanService.runScan(55L, scanRequest());
+
+        verify(aiSuggestionRepository, never()).save(any(AiSuggestion.class));
+        assertEquals(Scan.STATUS_COMPLETED, pending.getScanStatus());
+    }
+
+    @Test
+    void runScan_throwsNotFound_whenTheScanRowIsMissing() {
+        when(scanRepository.findById(55L)).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> scanService.runScan(55L, scanRequest()));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    }
+
+    @Test
+    void lookups_answerNotFound_forUnknownIds() {
+        when(vulnerabilityRepository.findById(1L)).thenReturn(Optional.empty());
+        when(scanRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
+                () -> scanService.getVulnerabilityById(1L, USER)).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
+                () -> scanService.getScanStatus(9L, USER)).getStatusCode());
     }
 }

@@ -28,6 +28,7 @@ const RepositoryList: React.FC<RepositoryListProps> = ({
       toast.success('Scan triggered successfully');
       onScanTriggered();
     } catch (err) {
+      console.error('Failed to trigger scan:', err);
       toast.error('Failed to trigger scan');
     } finally {
       setScanningRepoId(null);
@@ -44,6 +45,7 @@ const RepositoryList: React.FC<RepositoryListProps> = ({
       toast.success('Repository removed');
       onRefresh();
     } catch (err) {
+      console.error('Failed to remove repository:', err);
       toast.error('Failed to remove repository');
     }
   };
