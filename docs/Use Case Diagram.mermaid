@@ -9,7 +9,7 @@ flowchart LR
     end
 
     PortalUser(("👤 Portal User
-(shared permission set)"))
+(authenticated; owner-only access to own projects)"))
 
     PM -.->|"is a"| PortalUser
     TL -.->|"is a"| PortalUser
@@ -21,33 +21,29 @@ flowchart LR
         subgraph "Account & Auth"
             UC1([Register Account])
             UC2([Log In / Log Out])
-            UC3([View Own Profile])
         end
 
         subgraph "Project Management"
-            UC4([Create Project])
-            UC5([View Projects & Dashboard Summary])
-            UC6([Update Project])
-            UC7([Delete Project])
+            UC3([Create Project])
+            UC4([View Projects & Dashboard Summary])
+            UC5([Update Project])
+            UC6([Delete Project])
         end
 
         subgraph "Repository Management"
-            UC8([Add GitHub Repository])
-            UC9([View Repositories])
-            UC10([Remove Repository])
+            UC7([Add GitHub Repository])
+            UC8([View Repositories])
+            UC9([Remove Repository])
         end
 
         subgraph "Scan Management"
-            UC11([Trigger Scan via SonarQube])
-            UC12([View Scan Status])
-            UC13([View Scan History])
+            UC10([Trigger Scan via SonarQube])
         end
 
         subgraph "Vulnerability Management"
-            UC14([View Vulnerabilities])
-            UC15([View Vulnerability Detail])
-            UC16([Update Vulnerability Status Open / In Progress / Resolved / False Positive])
-            UC17(["Regenerate AI Fix Suggestion via AI router (Gemini active) — Blocker/Critical only"])
+            UC11([View Vulnerabilities])
+            UC12(["View Vulnerability Detail & AI Fix Suggestion (generated during scan for Blocker/Critical findings via AI router, Gemini active)"])
+            UC13([Update Vulnerability Status Open / In Progress / Resolved / False Positive])
         end
 
     end
@@ -65,10 +61,6 @@ flowchart LR
     PortalUser --- UC11
     PortalUser --- UC12
     PortalUser --- UC13
-    PortalUser --- UC14
-    PortalUser --- UC15
-    PortalUser --- UC16
-    PortalUser --- UC17
 
     
     %% Styling
@@ -79,18 +71,14 @@ flowchart LR
     style PortalUser fill:#607D8B,color:#fff
     style UC1 fill:#E3F2FD,color:#000
     style UC2 fill:#E3F2FD,color:#000
-    style UC3 fill:#E3F2FD,color:#000
+    style UC3 fill:#E8F5E9,color:#000
     style UC4 fill:#E8F5E9,color:#000
     style UC5 fill:#E8F5E9,color:#000
     style UC6 fill:#E8F5E9,color:#000
-    style UC7 fill:#E8F5E9,color:#000
+    style UC7 fill:#FFF3E0,color:#000
     style UC8 fill:#FFF3E0,color:#000
     style UC9 fill:#FFF3E0,color:#000
-    style UC10 fill:#FFF3E0,color:#000
-    style UC11 fill:#F3E5F5,color:#000
-    style UC12 fill:#F3E5F5,color:#000
-    style UC13 fill:#F3E5F5,color:#000
-    style UC14 fill:#FFEBEE,color:#000
-    style UC15 fill:#FFEBEE,color:#000
-    style UC16 fill:#FFEBEE,color:#000
-    style UC17 fill:#FFEBEE,color:#000
+    style UC10 fill:#F3E5F5,color:#000
+    style UC11 fill:#FFEBEE,color:#000
+    style UC12 fill:#FFEBEE,color:#000
+    style UC13 fill:#FFEBEE,color:#000

@@ -7,9 +7,11 @@ import com.portal.scan.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,20 +40,32 @@ public class ScanService {
     @Autowired
     private AiSuggestionRouter aiSuggestionRouter;
     
-    @Async
+    /**
+     * Create the scan record synchronously (status PENDING, owned by the caller) so its id can be
+     * returned to the client immediately. The analysis itself runs later in runScan().
+     */
     @Transactional
-    public void scanRepository(ScanRequestDTO request) {
-        log.info("Starting scan for project {} repository {}", request.getProjectId(), request.getRepositoryId());
-        
+    public Scan createScan(ScanRequestDTO request, Long ownerId) {
         Scan scan = new Scan(
             request.getProjectId(),
             request.getRepositoryId(),
             request.getRepositoryUrl(),
             request.getBranch()
         );
+        scan.setOwnerId(ownerId);
+        return scanRepository.save(scan);
+    }
+
+    @Async
+    @Transactional
+    public void runScan(Long scanId, ScanRequestDTO request) {
+        log.info("Starting scan {} for project {} repository {}", scanId, request.getProjectId(), request.getRepositoryId());
+
+        Scan scan = scanRepository.findById(scanId)
+            .orElseThrow(() -> new RuntimeException("Scan not found with id: " + scanId));
         scan.setScanStatus(Scan.STATUS_SCANNING);
         scan = scanRepository.save(scan);
-        
+
         try {
             String projectKey = "project_" + request.getProjectId() + "_scan_" + scan.getId();
             scan.setSonarqubeProjectKey(projectKey);
@@ -144,10 +158,25 @@ public class ScanService {
         scanSummaryRepository.save(summary);
     }
 
-    public ScanStatusDTO getScanStatus(Long scanId) {
+    /**
+     * Load a scan and verify the caller (userId from the JWT) owns it. 403 otherwise.
+     */
+    private Scan requireOwnedScan(Long scanId, Long userId) {
         Scan scan = scanRepository.findById(scanId)
             .orElseThrow(() -> new RuntimeException("Scan not found with id: " + scanId));
-        
+        assertOwner(scan, userId);
+        return scan;
+    }
+
+    private void assertOwner(Scan scan, Long userId) {
+        if (userId == null || !userId.equals(scan.getOwnerId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't have access to this scan");
+        }
+    }
+
+    public ScanStatusDTO getScanStatus(Long scanId, Long userId) {
+        Scan scan = requireOwnedScan(scanId, userId);
+
         ScanStatusDTO dto = new ScanStatusDTO();
         dto.setScanId(scan.getId());
         dto.setStatus(scan.getScanStatus());
@@ -166,8 +195,8 @@ public class ScanService {
         return dto;
     }
     
-    public List<ScanHistoryDTO> getScanHistory(Long repositoryId) {
-        List<Scan> scans = scanRepository.findByRepositoryIdOrderByStartedAtDesc(repositoryId);
+    public List<ScanHistoryDTO> getScanHistory(Long repositoryId, Long userId) {
+        List<Scan> scans = scanRepository.findByRepositoryIdAndOwnerIdOrderByStartedAtDesc(repositoryId, userId);
         
         return scans.stream().map(scan -> {
             ScanHistoryDTO dto = new ScanHistoryDTO();
@@ -193,36 +222,43 @@ public class ScanService {
         }).collect(Collectors.toList());
     }
     
-    public List<VulnerabilityDTO> getVulnerabilitiesForProject(Long projectId) {
-        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findLatestByProjectId(projectId);
+    public List<VulnerabilityDTO> getVulnerabilitiesForProject(Long projectId, Long userId) {
+        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findLatestByProjectId(projectId, userId);
         return vulnerabilities.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
-    
-    public List<VulnerabilityDTO> getVulnerabilitiesForScan(Long scanId) {
+
+    public List<VulnerabilityDTO> getVulnerabilitiesForScan(Long scanId, Long userId) {
+        requireOwnedScan(scanId, userId);
         List<Vulnerability> vulnerabilities = vulnerabilityRepository.findByScanId(scanId);
         return vulnerabilities.stream().map(this::convertToDTO).collect(Collectors.toList());
     }
-    
-    public VulnerabilityDTO getVulnerabilityById(Long vulnerabilityId) {
+
+    /**
+     * Load a vulnerability and verify the caller owns the scan it belongs to. 403 otherwise.
+     */
+    private Vulnerability requireOwnedVulnerability(Long vulnerabilityId, Long userId) {
         Vulnerability vuln = vulnerabilityRepository.findById(vulnerabilityId)
             .orElseThrow(() -> new RuntimeException("Vulnerability not found with id: " + vulnerabilityId));
-        return convertToDTO(vuln);
+        assertOwner(vuln.getScan(), userId);
+        return vuln;
     }
-    
+
+    public VulnerabilityDTO getVulnerabilityById(Long vulnerabilityId, Long userId) {
+        return convertToDTO(requireOwnedVulnerability(vulnerabilityId, userId));
+    }
+
     @Transactional
-    public void updateVulnerabilityStatus(Long vulnerabilityId, String status) {
-        Vulnerability vuln = vulnerabilityRepository.findById(vulnerabilityId)
-            .orElseThrow(() -> new RuntimeException("Vulnerability not found with id: " + vulnerabilityId));
+    public void updateVulnerabilityStatus(Long vulnerabilityId, String status, Long userId) {
+        Vulnerability vuln = requireOwnedVulnerability(vulnerabilityId, userId);
         vuln.setStatus(status);
         vulnerabilityRepository.save(vuln);
         log.info("Updated vulnerability {} status to {}", vulnerabilityId, status);
     }
     
     @Transactional
-    public AiSuggestionDTO regenerateSuggestion(Long vulnerabilityId) {
-        Vulnerability vuln = vulnerabilityRepository.findById(vulnerabilityId)
-            .orElseThrow(() -> new RuntimeException("Vulnerability not found with id: " + vulnerabilityId));
-        
+    public AiSuggestionDTO regenerateSuggestion(Long vulnerabilityId, Long userId) {
+        Vulnerability vuln = requireOwnedVulnerability(vulnerabilityId, userId);
+
         AiSuggestionResult result = aiSuggestionRouter.generateFixSuggestion(vuln);
 
         AiSuggestion aiSuggestion = aiSuggestionRepository.findByVulnerabilityId(vulnerabilityId)
@@ -247,8 +283,8 @@ public class ScanService {
         return dto;
     }
     
-    public DashboardSummaryDTO getDashboardSummary(Long projectId) {
-        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findLatestByProjectId(projectId);
+    public DashboardSummaryDTO getDashboardSummary(Long projectId, Long userId) {
+        List<Vulnerability> vulnerabilities = vulnerabilityRepository.findLatestByProjectId(projectId, userId);
 
         DashboardSummaryDTO dto = new DashboardSummaryDTO();
         dto.setTotalVulnerabilities(vulnerabilities.size());
@@ -258,7 +294,7 @@ public class ScanService {
         dto.setMinorCount((int) vulnerabilities.stream().filter(v -> "MINOR".equals(v.getSeverity())).count());
         dto.setInfoCount((int) vulnerabilities.stream().filter(v -> "INFO".equals(v.getSeverity())).count());
         
-        scanRepository.findTopByProjectIdOrderByStartedAtDesc(projectId).ifPresent(scan -> {
+        scanRepository.findTopByProjectIdAndOwnerIdOrderByStartedAtDesc(projectId, userId).ifPresent(scan -> {
             dto.setLastScanAt(scan.getStartedAt());
             dto.setLastScanStatus(scan.getScanStatus());
         });

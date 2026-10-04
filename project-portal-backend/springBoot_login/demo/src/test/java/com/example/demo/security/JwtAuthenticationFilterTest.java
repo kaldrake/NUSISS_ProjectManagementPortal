@@ -16,6 +16,7 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.crypto.SecretKey;
@@ -25,6 +26,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +36,7 @@ class JwtAuthenticationFilterTest {
 
     @Mock private JwtUtil jwtUtil;
     @Mock private SessionRepository sessionRepository;
+    @Mock private UserDetailsService userDetailsService;
     @InjectMocks private JwtAuthenticationFilter filter;
 
     private static final String SECRET =
@@ -86,12 +90,15 @@ class JwtAuthenticationFilterTest {
                         org.springframework.security.core.authority.AuthorityUtils.NO_AUTHORITIES);
 
         when(jwtUtil.extractUsername(token)).thenReturn("testuser");
+        when(userDetailsService.loadUserByUsername("testuser")).thenReturn(mockUserDetails);
         when(jwtUtil.isTokenValid(token, mockUserDetails)).thenReturn(true);
-        when(sessionRepository.existsByJwtTokenAndExpiresAtAfter(token, org.mockito.ArgumentMatchers.any(LocalDateTime.class)))
+        when(sessionRepository.existsByJwtTokenAndExpiresAtAfter(eq(token), any(LocalDateTime.class)))
                 .thenReturn(true);
 
-        // Would need UserDetailsService mock to fully test, but we're focusing on filter logic
-        // In a full integration test, this would resolve the user
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getName()).isEqualTo("testuser");
     }
 
     @Test
@@ -105,8 +112,9 @@ class JwtAuthenticationFilterTest {
                         org.springframework.security.core.authority.AuthorityUtils.NO_AUTHORITIES);
 
         when(jwtUtil.extractUsername(token)).thenReturn("testuser");
+        when(userDetailsService.loadUserByUsername("testuser")).thenReturn(mockUserDetails);
         when(jwtUtil.isTokenValid(token, mockUserDetails)).thenReturn(true);
-        when(sessionRepository.existsByJwtTokenAndExpiresAtAfter(token, org.mockito.ArgumentMatchers.any(LocalDateTime.class)))
+        when(sessionRepository.existsByJwtTokenAndExpiresAtAfter(eq(token), any(LocalDateTime.class)))
                 .thenReturn(false); // Session doesn't exist (logged out)
 
         filter.doFilterInternal(request, response, filterChain);

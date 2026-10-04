@@ -95,6 +95,11 @@ public class SonarQubeScannerService {
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
         
+        // Mask the token so it never reaches the logs
+        log.info("Running command: {}", pb.command().stream()
+            .map(arg -> arg.startsWith("-Dsonar.login=") ? "-Dsonar.login=****" : arg)
+            .collect(java.util.stream.Collectors.joining(" ")));
+        
         Process process = pb.start();
         
         // Capture ALL output
@@ -160,40 +165,45 @@ public class SonarQubeScannerService {
         HttpHeaders headers = new HttpHeaders();
         headers.setBasicAuth(sonarToken, "");
         
-        ResponseEntity<String> response = restTemplate.exchange(
-            url, HttpMethod.GET, new HttpEntity<>(headers), String.class
-        );
-        
-        if (!response.getStatusCode().is2xxSuccessful()) {
-            log.error("Failed to fetch issues. Status: {}", response.getStatusCode());
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                url, HttpMethod.GET, new HttpEntity<>(headers), String.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("Failed to fetch issues. Status: {}", response.getStatusCode());
+                return new ArrayList<>();
+            }
+
+            JsonNode root = objectMapper.readTree(response.getBody());
+            JsonNode issues = root.path("issues");
+
+            List<SonarQubeIssue> result = new ArrayList<>();
+            for (JsonNode issue : issues) {
+                SonarQubeIssue sqIssue = new SonarQubeIssue();
+                sqIssue.setRuleId(issue.path("rule").asText());
+                sqIssue.setType(issue.path("type").asText());
+                sqIssue.setSeverity(issue.path("severity").asText());
+
+                // Extract file path from component (format: projectKey:file/path)
+                String component = issue.path("component").asText();
+                if (component.contains(":")) {
+                    sqIssue.setFilePath(component.substring(component.indexOf(":") + 1));
+                } else {
+                    sqIssue.setFilePath(component);
+                }
+
+                sqIssue.setLineNumber(issue.path("line").asInt());
+                sqIssue.setMessage(issue.path("message").asText());
+                result.add(sqIssue);
+            }
+
+            log.info("Fetched {} issues for project: {}", result.size(), projectKey);
+            return result;
+        } catch (Exception e) {
+            log.error("Failed to fetch issues: {}", e.getMessage());
             return new ArrayList<>();
         }
-        
-        JsonNode root = objectMapper.readTree(response.getBody());
-        JsonNode issues = root.path("issues");
-        
-        List<SonarQubeIssue> result = new ArrayList<>();
-        for (JsonNode issue : issues) {
-            SonarQubeIssue sqIssue = new SonarQubeIssue();
-            sqIssue.setRuleId(issue.path("rule").asText());
-            sqIssue.setType(issue.path("type").asText());
-            sqIssue.setSeverity(issue.path("severity").asText());
-            
-            // Extract file path from component (format: projectKey:file/path)
-            String component = issue.path("component").asText();
-            if (component.contains(":")) {
-                sqIssue.setFilePath(component.substring(component.indexOf(":") + 1));
-            } else {
-                sqIssue.setFilePath(component);
-            }
-            
-            sqIssue.setLineNumber(issue.path("line").asInt());
-            sqIssue.setMessage(issue.path("message").asText());
-            result.add(sqIssue);
-        }
-        
-        log.info("Fetched {} issues for project: {}", result.size(), projectKey);
-        return result;
     }
     
     private void cleanup(String repoPath) {

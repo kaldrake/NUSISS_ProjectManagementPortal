@@ -39,14 +39,23 @@ public class ProjectService {
     // =============================================
     
     /**
-     * Load a project owned by the given user. Projects of other users are
-     * reported as not found, so their existence is not revealed.
+     * Load a project and verify that the caller (userId from the JWT) owns it.
+     * 403 if owned by someone else; existing behaviour (RuntimeException) if missing.
      */
-    public Project getOwnedProject(Long projectId, Long userId) {
-        return projectRepository.findById(projectId)
-            .filter(project -> project.getOwnerId().equals(userId))
-            .orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.NOT_FOUND, "Project not found with id: " + projectId));
+    private Project requireOwnedProject(Long projectId, Long userId) {
+        Project project = projectRepository.findById(projectId)
+            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        if (userId == null || !project.getOwnerId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't have access to this project");
+        }
+        return project;
+    }
+
+    /**
+     * Verify the caller owns the project (used by the controller before async work starts)
+     */
+    public void assertProjectOwner(Long projectId, Long userId) {
+        requireOwnedProject(projectId, userId);
     }
 
     /**
@@ -67,9 +76,7 @@ public class ProjectService {
     public ProjectResponseDTO getProjectById(Long projectId, Long userId) {
         log.info("Fetching project by ID: {}", projectId);
 
-        Project project = getOwnedProject(projectId, userId);
-
-        return convertToDTO(project);
+        return convertToDTO(requireOwnedProject(projectId, userId));
     }
     
     /**
@@ -102,9 +109,15 @@ public class ProjectService {
     @Transactional
     public ProjectResponseDTO updateProject(Long projectId, ProjectUpdateDTO updateDTO, Long ownerId) {
         log.info("Updating project ID: {} for owner: {}", projectId, ownerId);
-
-        Project project = getOwnedProject(projectId, ownerId);
-
+        
+        Project project = projectRepository.findById(projectId)
+            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        
+        // Verify ownership
+        if (!project.getOwnerId().equals(ownerId)) {
+            throw new RuntimeException("You don't have permission to update this project");
+        }
+        
         if (updateDTO.getName() != null && !updateDTO.getName().isEmpty()) {
             // Check if new name conflicts with existing project
             if (!updateDTO.getName().equals(project.getName()) &&
@@ -132,9 +145,15 @@ public class ProjectService {
     @Transactional
     public void deleteProject(Long projectId, Long ownerId) {
         log.info("Deleting project ID: {} for owner: {}", projectId, ownerId);
-
-        Project project = getOwnedProject(projectId, ownerId);
-
+        
+        Project project = projectRepository.findById(projectId)
+            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        
+        // Verify ownership
+        if (!project.getOwnerId().equals(ownerId)) {
+            throw new RuntimeException("You don't have permission to delete this project");
+        }
+        
         // Delete associated repositories first (cascade should handle, but explicit for safety)
         gitHubRepositoryRepository.deleteByProjectId(projectId);
         
@@ -153,7 +172,7 @@ public class ProjectService {
     public List<GitHubRepositoryDTO> getProjectRepositories(Long projectId, Long userId) {
         log.info("Fetching repositories for project ID: {}", projectId);
 
-        getOwnedProject(projectId, userId);
+        requireOwnedProject(projectId, userId);
 
         List<GitHubRepository> repositories = gitHubRepositoryRepository.findByProjectId(projectId);
         return repositories.stream()
@@ -168,7 +187,7 @@ public class ProjectService {
     public GitHubRepositoryDTO addRepository(Long projectId, GitHubRepositoryDTO repositoryDTO, Long userId) {
         log.info("Adding repository '{}' to project ID: {}", repositoryDTO.getRepoFullName(), projectId);
 
-        getOwnedProject(projectId, userId);
+        requireOwnedProject(projectId, userId);
 
         // Check if repository already exists in this project
         if (gitHubRepositoryRepository.existsByProjectIdAndGithubRepoId(projectId, repositoryDTO.getGithubRepoId())) {
@@ -200,7 +219,7 @@ public class ProjectService {
     public void removeRepository(Long repositoryId, Long projectId, Long userId) {
         log.info("Removing repository ID: {} from project ID: {}", repositoryId, projectId);
 
-        getOwnedProject(projectId, userId);
+        requireOwnedProject(projectId, userId);
 
         GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
             .orElseThrow(() -> new RuntimeException("Repository not found with id: " + repositoryId));
@@ -219,22 +238,24 @@ public class ProjectService {
     // =============================================
     
     /**
-     * Trigger a scan for a repository
+     * Trigger a scan for a repository. Runs on an async thread where the incoming
+     * request is no longer available, so the caller's JWT is passed in explicitly.
+     * Ownership must already have been verified via assertProjectOwner.
      */
     @Async
     public void triggerScan(Long projectId, Long repositoryId, String jwtToken) {
         log.info("Triggering scan for project ID: {}, repository ID: {}", projectId, repositoryId);
-
+        
         try {
             // Get repository details
             GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
                 .orElseThrow(() -> new RuntimeException("Repository not found: " + repositoryId));
-
+            
             // Verify repository belongs to project
             if (!repository.getProjectId().equals(projectId)) {
                 throw new RuntimeException("Repository does not belong to project: " + projectId);
             }
-
+            
             // Call Scan Service
             ScanResponseDTO scanResponse = scanServiceClient.triggerScan(
                 projectId,
@@ -244,8 +265,10 @@ public class ProjectService {
                 jwtToken
             );
             
-            if (scanResponse != null) {
-                log.info("Scan triggered successfully for repository: {}", repositoryId);
+            if (scanResponse != null && scanResponse.getScanId() != null) {
+                log.info("Scan triggered successfully with ID: {}", scanResponse.getScanId());
+                
+                // Update last scan timestamp
                 gitHubRepositoryRepository.updateLastScanAt(repositoryId, LocalDateTime.now());
             } else {
                 log.error("Failed to trigger scan for repository: {}", repositoryId);
@@ -262,7 +285,7 @@ public class ProjectService {
     public DashboardSummaryDTO getProjectDashboardSummary(Long projectId, Long userId) {
         log.info("Fetching dashboard summary for project ID: {}", projectId);
 
-        getOwnedProject(projectId, userId);
+        requireOwnedProject(projectId, userId);
 
         // Call Scan Service for dashboard summary
         return scanServiceClient.getDashboardSummary(projectId);

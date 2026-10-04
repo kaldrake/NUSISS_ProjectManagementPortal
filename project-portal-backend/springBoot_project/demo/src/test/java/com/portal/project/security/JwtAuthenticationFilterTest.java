@@ -99,6 +99,8 @@ class JwtAuthenticationFilterTest {
     @DisplayName("Request with invalid token signature - no authentication set")
     void filter_InvalidToken_NoAuthenticationSet() throws Exception {
         request.addHeader("Authorization", "Bearer invalid.token.here");
+        // Passes the cheap validity check, then fails when the claims are read
+        org.mockito.Mockito.when(jwtUtil.isTokenValid("invalid.token.here")).thenReturn(true);
         org.mockito.Mockito.when(jwtUtil.extractUsername("invalid.token.here"))
                 .thenThrow(new RuntimeException("Invalid token"));
 

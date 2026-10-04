@@ -18,12 +18,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/projects")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class ProjectController {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectController.class);
@@ -34,32 +34,15 @@ public class ProjectController {
     // =============================================
     // PROJECT CRUD ENDPOINTS
     // =============================================
-    // The caller's userId comes from the verified JWT (set by JwtAuthenticationFilter),
-    // never from a client-supplied header, so users only ever see their own projects.
 
     /**
-     * GET /api/projects - Get the current user's projects
+     * GET /api/projects - Get the caller's projects (userId comes from the JWT, not a client header)
      */
     @GetMapping
     public ResponseEntity<List<ProjectResponseDTO>> getMyProjects(
             @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
         log.info("GET /api/projects - Fetching projects for user: {}", userId);
         List<ProjectResponseDTO> projects = projectService.getProjectsByOwner(userId);
-        return ResponseEntity.ok(projects);
-    }
-
-    /**
-     * GET /api/projects?ownerId=123 - Get projects by owner (own projects only)
-     */
-    @GetMapping(params = "ownerId")
-    public ResponseEntity<List<ProjectResponseDTO>> getProjectsByOwner(
-            @RequestParam Long ownerId,
-            @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId) {
-        log.info("GET /api/projects?ownerId={} - Fetching projects by owner", ownerId);
-        if (!ownerId.equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only list your own projects");
-        }
-        List<ProjectResponseDTO> projects = projectService.getProjectsByOwner(ownerId);
         return ResponseEntity.ok(projects);
     }
 
@@ -171,13 +154,13 @@ public class ProjectController {
             @PathVariable Long projectId,
             @PathVariable Long repositoryId,
             @RequestAttribute(JwtAuthenticationFilter.USER_ID_ATTRIBUTE) Long userId,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+            @RequestHeader("Authorization") String authorization) {
 
         log.info("POST /api/projects/{}/repositories/{}/scan - Triggering scan", projectId, repositoryId);
-        // Checked here because triggerScan runs asynchronously and cannot return an error status
-        projectService.getOwnedProject(projectId, userId);
-        String token = (authHeader != null && authHeader.startsWith("Bearer ")) ? authHeader.substring(7) : null;
-        projectService.triggerScan(projectId, repositoryId, token);
+        // Check ownership synchronously so a non-owner gets 403; the scan itself runs @Async
+        projectService.assertProjectOwner(projectId, userId);
+        // Forward the caller's JWT explicitly: the async thread has no access to the request
+        projectService.triggerScan(projectId, repositoryId, authorization.substring(7));
         return ResponseEntity.accepted().build();
     }
 

@@ -2,7 +2,7 @@ name: Combined Security Scans (Separate Frontend/Backend)
 
 on:
   push:
-    branches: [main, feature-sonarCloud, add-JWT-config]
+    branches: [main, fix-vulnerabilities, add-JWT-config]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -242,19 +242,19 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('project-portal-backend/**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # Compiled classes give Sonar's Java analyzer full semantic analysis
-      # (sonar.java.binaries below) instead of just syntax-level checks.
-      - name: Compile login-service
+      # mvn test compiles the code (full semantic analysis via sonar.java.binaries) and runs the
+      # unit tests with JaCoCo, producing target/site/jacoco/jacoco.xml for Sonar coverage.
+      - name: Test login-service with coverage
         working-directory: project-portal-backend/springBoot_login/demo
-        run: mvn -B compile
+        run: mvn -B test
 
-      - name: Compile project-service
+      - name: Test project-service with coverage
         working-directory: project-portal-backend/springBoot_project/demo
-        run: mvn -B compile
+        run: mvn -B test
 
-      - name: Compile scan-service
+      - name: Test scan-service with coverage
         working-directory: project-portal-backend/springBoot_scan/demo
-        run: mvn -B compile
+        run: mvn -B test
 
       - name: Install frontend dependencies
         working-directory: project-portal-frontend
@@ -274,11 +274,59 @@ jobs:
             -Dsonar.tests=project-portal-backend/springBoot_login/demo/src/test,project-portal-backend/springBoot_project/demo/src/test,project-portal-backend/springBoot_scan/demo/src/test,project-portal-frontend/src
             -Dsonar.test.inclusions=**/*Test.java,**/*Tests.java,**/*.test.ts,**/*.test.tsx
             -Dsonar.java.binaries=project-portal-backend/springBoot_login/demo/target/classes,project-portal-backend/springBoot_project/demo/target/classes,project-portal-backend/springBoot_scan/demo/target/classes
+            -Dsonar.java.test.binaries=project-portal-backend/springBoot_login/demo/target/test-classes,project-portal-backend/springBoot_project/demo/target/test-classes,project-portal-backend/springBoot_scan/demo/target/test-classes
+            -Dsonar.coverage.jacoco.xmlReportPaths=project-portal-backend/springBoot_login/demo/target/site/jacoco/jacoco.xml,project-portal-backend/springBoot_project/demo/target/site/jacoco/jacoco.xml,project-portal-backend/springBoot_scan/demo/target/site/jacoco/jacoco.xml
             -Dsonar.javascript.lcov.reportPaths=project-portal-frontend/coverage/lcov.info
+            -Dsonar.coverage.exclusions=**/dto/**,**/entity/**,**/config/**,**/*Application.java,**/ClaudeService.java,**/DeepSeekService.java,**/index.tsx,**/reportWebVitals.ts,**/types/**
+            -Dsonar.cpd.exclusions=**/dto/**,**/entity/**,**/config/**,**/security/JwtUtil.java,**/security/JwtAuthenticationFilter.java
         env:
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
+  # =============================================
+  # BACKEND UNIT TESTS — runs mvn test for each service in parallel
+  # =============================================
+  backend-tests:
+    name: Backend Maven Tests (${{ matrix.service.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: login
+            path: project-portal-backend/springBoot_login/demo
+          - name: project
+            path: project-portal-backend/springBoot_project/demo
+          - name: scan
+            path: project-portal-backend/springBoot_scan/demo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles(format('{0}/pom.xml', matrix.service.path)) }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Run unit tests (${{ matrix.service.name }})
+        working-directory: ${{ matrix.service.path }}
+        run: mvn -B test
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-${{ matrix.service.name }}
+          path: ${{ matrix.service.path }}/target/surefire-reports
+          if-no-files-found: ignore
 
   # =============================================
   # DOCKER BUILD & PUSH TO ECR (CD)

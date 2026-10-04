@@ -66,19 +66,23 @@ classDiagram
     namespace Scan_Service {
         class ScanJwtFilter {
             <<OncePerRequestFilter>>
+            sets userId request attribute
         }
         class ScanController {
             <<RestController>>
-            +analyzeRepository(request)
-            +getProjectVulnerabilities(projectId)
-            +regenerateSuggestion(vulnId)
+            +analyzeRepository(request, userId)
+            +getProjectVulnerabilities(projectId, userId)
+            +regenerateSuggestion(vulnId, userId)
         }
         class ScanService {
             <<Service>>
-            +scanRepository(request) async, transactional
-            +getVulnerabilitiesForProject(projectId)
-            +getDashboardSummary(projectId)
-            +getScanHistory(repoId)
+            +createScan(request, ownerId)
+            +runScan(scanId, request) async, transactional
+            +getVulnerabilitiesForProject(projectId, userId)
+            +getDashboardSummary(projectId, userId)
+            +getScanHistory(repoId, userId)
+            -requireOwnedScan(scanId, userId)
+            -requireOwnedVulnerability(vulnId, userId)
             -saveScanSummary(scanId, issues)
         }
         class SonarQubeScannerService {
@@ -117,7 +121,7 @@ classDiagram
         }
         class VulnerabilityRepository {
             <<JpaRepository>>
-            +findLatestByProjectId(pid)
+            +findLatestByProjectId(pid, ownerId)
         }
         class AiSuggestionRepository {
             <<JpaRepository>>

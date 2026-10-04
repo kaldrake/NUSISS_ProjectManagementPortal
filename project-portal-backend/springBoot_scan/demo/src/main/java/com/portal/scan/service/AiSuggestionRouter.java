@@ -20,8 +20,9 @@ public class AiSuggestionRouter {
     private final DeepSeekService deepSeekService;
     private final GeminiService geminiService;
 
+    // Initialised for construction outside Spring (unit tests); Spring injects AI_PROVIDER
     @Value("${ai.provider:gemini}")
-    private String aiProvider;
+    private String aiProvider = "gemini";
 
     public AiSuggestionRouter(ClaudeService claudeService, DeepSeekService deepSeekService,
             GeminiService geminiService) {

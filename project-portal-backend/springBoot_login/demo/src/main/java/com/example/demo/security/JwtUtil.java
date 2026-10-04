@@ -12,6 +12,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class JwtUtil {
@@ -32,6 +33,9 @@ public class JwtUtil {
         return Jwts.builder()
                 .claims(claims)
                 .subject(userDetails.getUsername())
+                // Unique token ID: two logins in the same second must not produce the same JWT,
+                // or logging out one session would also revoke the other
+                .id(UUID.randomUUID().toString())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
                 .signWith(getSigningKey())
