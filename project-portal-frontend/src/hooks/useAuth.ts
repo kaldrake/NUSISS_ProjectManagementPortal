@@ -23,7 +23,7 @@ export const useAuth = () => {
       setLoading(false);
     };
 
-    checkAuth();
+    void checkAuth();
   }, []);
 
   const logout = () => {

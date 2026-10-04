@@ -13,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -43,8 +44,22 @@ public class SonarQubeScannerService {
         }
     }
     
+    /**
+     * Creates the clone directory readable only by the service user, so other local users
+     * cannot read or tamper with the code being scanned in the shared temp directory.
+     */
+    private Path createScanDirectory() throws IOException {
+        try {
+            return Files.createTempDirectory("sonar-scan-",
+                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
+        } catch (UnsupportedOperationException e) {
+            // Non-POSIX file system (e.g. a Windows development machine)
+            return Files.createTempDirectory("sonar-scan-");
+        }
+    }
+    
     private String cloneRepository(String repoUrl, String branch) throws Exception {
-        String repoPath = Files.createTempDirectory("sonar-scan-").toString();
+        String repoPath = createScanDirectory().toString();
         
         ProcessBuilder pb = new ProcessBuilder(
             "git", "clone", "--branch", branch, "--single-branch", "--depth", "1",

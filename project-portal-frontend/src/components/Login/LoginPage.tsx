@@ -108,8 +108,8 @@ const LoginPage: React.FC = () => {
                 {isLogin ? (
                     <form onSubmit={handleLogin} className="space-y-5">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                            <input
+                            <label htmlFor="login-username" className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                            <input id="login-username"
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
@@ -119,8 +119,8 @@ const LoginPage: React.FC = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input
+                            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <input id="login-password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -140,8 +140,8 @@ const LoginPage: React.FC = () => {
                 ) : (
                     <form onSubmit={handleRegister} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                            <input
+                            <label htmlFor="register-username" className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                            <input id="register-username"
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
@@ -151,8 +151,8 @@ const LoginPage: React.FC = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                            <input
+                            <label htmlFor="register-email" className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                            <input id="register-email"
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
@@ -162,8 +162,8 @@ const LoginPage: React.FC = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                            <input
+                            <label htmlFor="register-password" className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                            <input id="register-password"
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -173,8 +173,8 @@ const LoginPage: React.FC = () => {
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
-                            <input
+                            <label htmlFor="register-confirm-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
+                            <input id="register-confirm-password"
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
