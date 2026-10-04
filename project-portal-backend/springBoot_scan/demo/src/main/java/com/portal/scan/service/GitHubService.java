@@ -1,6 +1,7 @@
 // scan-service/src/main/java/com/portal/scan/service/GitHubService.java
 package com.portal.scan.service;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.portal.scan.dto.GitHubRepositoryDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,31 +101,37 @@ public class GitHubService {
         return dto;
     }
     
+    /** Subset of GitHub's repository JSON; snake_case names are mapped explicitly. */
     private static class GitHubRepo {
         private Long id;
         private String name;
-        private String full_name;
-        private String html_url;
-        private String clone_url;
-        private String default_branch;
-        private boolean _private;
+        @JsonProperty("full_name")
+        private String fullName;
+        @JsonProperty("html_url")
+        private String htmlUrl;
+        @JsonProperty("clone_url")
+        private String cloneUrl;
+        @JsonProperty("default_branch")
+        private String defaultBranch;
+        @JsonProperty("private")
+        private boolean privateRepo;
         private String description;
         private String language;
-        
+
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
-        public String getFullName() { return full_name; }
-        public void setFullName(String full_name) { this.full_name = full_name; }
-        public String getHtmlUrl() { return html_url; }
-        public void setHtmlUrl(String html_url) { this.html_url = html_url; }
-        public String getCloneUrl() { return clone_url; }
-        public void setCloneUrl(String clone_url) { this.clone_url = clone_url; }
-        public String getDefaultBranch() { return default_branch; }
-        public void setDefaultBranch(String default_branch) { this.default_branch = default_branch; }
-        public boolean isPrivate() { return _private; }
-        public void setPrivate(boolean _private) { this._private = _private; }
+        public String getFullName() { return fullName; }
+        public void setFullName(String fullName) { this.fullName = fullName; }
+        public String getHtmlUrl() { return htmlUrl; }
+        public void setHtmlUrl(String htmlUrl) { this.htmlUrl = htmlUrl; }
+        public String getCloneUrl() { return cloneUrl; }
+        public void setCloneUrl(String cloneUrl) { this.cloneUrl = cloneUrl; }
+        public String getDefaultBranch() { return defaultBranch; }
+        public void setDefaultBranch(String defaultBranch) { this.defaultBranch = defaultBranch; }
+        public boolean isPrivate() { return privateRepo; }
+        public void setPrivate(boolean privateRepo) { this.privateRepo = privateRepo; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
         public String getLanguage() { return language; }

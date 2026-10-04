@@ -3,6 +3,7 @@ package com.portal.scan.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "scan_summary")
@@ -34,7 +35,7 @@ public class ScanSummary {
     private Integer infoCount = 0;
 
     @Column(name = "created_at")
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now(ZoneId.systemDefault());
 
     public ScanSummary() {
     }

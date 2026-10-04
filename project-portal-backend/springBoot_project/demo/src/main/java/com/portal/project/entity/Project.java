@@ -3,6 +3,7 @@ package com.portal.project.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "projects")
@@ -35,8 +36,8 @@ public class Project {
         this.name = name;
         this.description = description;
         this.ownerId = ownerId;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(ZoneId.systemDefault());
+        this.updatedAt = LocalDateTime.now(ZoneId.systemDefault());
     }
     
     // Getters and Setters

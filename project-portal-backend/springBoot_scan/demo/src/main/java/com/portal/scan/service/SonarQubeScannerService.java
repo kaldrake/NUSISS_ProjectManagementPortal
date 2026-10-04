@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -29,6 +30,17 @@ public class SonarQubeScannerService {
     @Value("${sonar.token:}")
     private String sonarToken;
     
+    // Absolute executable paths (not looked up through PATH); override with scan.git.path / scan.sonar-scanner.path
+    @Value("${scan.git.path:/usr/bin/git}")
+    private String gitPath = "/usr/bin/git";
+
+    @Value("${scan.sonar-scanner.path:/usr/local/bin/sonar-scanner}")
+    private String sonarScannerPath = "/usr/local/bin/sonar-scanner";
+
+    // Where repositories are cloned; empty means a "scan-workspace" folder in the service user's home
+    @Value("${scan.workdir:}")
+    private String workDir = "";
+
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -45,24 +57,29 @@ public class SonarQubeScannerService {
     }
     
     /**
-     * Creates the clone directory readable only by the service user, so other local users
-     * cannot read or tamper with the code being scanned in the shared temp directory.
+     * Creates a clone directory readable only by the service user, in a private work folder
+     * rather than the world-writable system temp directory.
      */
     private Path createScanDirectory() throws IOException {
+        Path base = (workDir == null || workDir.isBlank())
+            ? Path.of(System.getProperty("user.home"), "scan-workspace")
+            : Path.of(workDir);
+        Files.createDirectories(base);
+        Path dir = base.resolve("scan-" + UUID.randomUUID());
         try {
-            return Files.createTempDirectory("sonar-scan-",
+            return Files.createDirectory(dir,
                 PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
         } catch (UnsupportedOperationException e) {
             // Non-POSIX file system (e.g. a Windows development machine)
-            return Files.createTempDirectory("sonar-scan-");
+            return Files.createDirectory(dir);
         }
     }
-    
+
     private String cloneRepository(String repoUrl, String branch) throws Exception {
         String repoPath = createScanDirectory().toString();
         
         ProcessBuilder pb = new ProcessBuilder(
-            "git", "clone", "--branch", branch, "--single-branch", "--depth", "1",
+            gitPath, "clone", "--branch", branch, "--single-branch", "--depth", "1",
             repoUrl, repoPath
         );
         pb.redirectErrorStream(true);
@@ -81,12 +98,12 @@ public class SonarQubeScannerService {
         
         if (!completed) {
             process.destroyForcibly();
-            throw new RuntimeException("Git clone timed out after 2 minutes");
+            throw new IllegalStateException("Git clone timed out after 2 minutes");
         }
         
         int exitCode = process.exitValue();
         if (exitCode != 0) {
-            throw new RuntimeException("Git clone failed with exit code: " + exitCode);
+            throw new IllegalStateException("Git clone failed with exit code: " + exitCode);
         }
         
         log.info("Cloned repository to: {}", repoPath);
@@ -99,7 +116,7 @@ public class SonarQubeScannerService {
         log.info("Repo path: {}", repoPath);
         
         ProcessBuilder pb = new ProcessBuilder(
-            "sonar-scanner",
+            sonarScannerPath,
             "-Dsonar.projectKey=" + projectKey,
             "-Dsonar.sources=.",
             "-Dsonar.java.binaries=.",
@@ -131,47 +148,50 @@ public class SonarQubeScannerService {
         if (exitCode != 0) {
             log.error("SonarScanner failed with exit code: {}", exitCode);
             log.error("Full output:\n{}", output.toString());
-            throw new RuntimeException("SonarScanner failed with exit code: " + exitCode + "\nOutput: " + output);
+            throw new IllegalStateException("SonarScanner failed with exit code: " + exitCode + "\nOutput: " + output);
         }
         
         log.info("SonarScanner completed successfully");
     }
     
-    private void waitForAnalysis(String projectKey) throws Exception {
+    private void waitForAnalysis(String projectKey) throws InterruptedException {
         String url = sonarHostUrl + "/api/ce/activity?component=" + projectKey;
         HttpHeaders headers = new HttpHeaders();
         headers.setBasicAuth(sonarToken, "");
-        
+
         for (int i = 0; i < 30; i++) {
             Thread.sleep(2000);
-            
-            try {
-                ResponseEntity<String> response = restTemplate.exchange(
-                    url, HttpMethod.GET, new HttpEntity<>(headers), String.class
-                );
-                
-                JsonNode root = objectMapper.readTree(response.getBody());
-                JsonNode tasks = root.path("tasks");
-                
-                if (tasks.isArray() && tasks.size() > 0) {
-                    String status = tasks.get(0).path("status").asText();
-                    if ("SUCCESS".equals(status)) {
-                        log.info("Analysis completed for: {}", projectKey);
-                        return;
-                    } else if ("FAILED".equals(status)) {
-                        throw new RuntimeException("Analysis failed for: " + projectKey);
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Waiting for analysis... attempt {}, error: {}", i + 1, e.getMessage());
+
+            String status = latestTaskStatus(url, headers, i + 1);
+            if ("SUCCESS".equals(status)) {
+                log.info("Analysis completed for: {}", projectKey);
+                return;
             }
-            
-            log.debug("Waiting for analysis... attempt {}", i + 1);
+            if ("FAILED".equals(status)) {
+                throw new IllegalStateException("Analysis failed for: " + projectKey);
+            }
         }
-        
-        throw new RuntimeException("Timeout waiting for analysis");
+
+        throw new IllegalStateException("Timeout waiting for analysis");
     }
-    
+
+    /** Status of the newest analysis task, or null if it cannot be read yet. */
+    private String latestTaskStatus(String url, HttpHeaders headers, int attempt) {
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                url, HttpMethod.GET, new HttpEntity<>(headers), String.class
+            );
+            JsonNode tasks = objectMapper.readTree(response.getBody()).path("tasks");
+            if (tasks.isArray() && tasks.size() > 0) {
+                return tasks.get(0).path("status").asText();
+            }
+        } catch (Exception e) {
+            log.warn("Waiting for analysis... attempt {}, error: {}", attempt, e.getMessage());
+        }
+        log.debug("Waiting for analysis... attempt {}", attempt);
+        return null;
+    }
+
     private List<SonarQubeIssue> fetchIssues(String projectKey) throws Exception {
         String url = sonarHostUrl + "/api/issues/search?componentKeys=" + projectKey + 
                      "&types=VULNERABILITY&ps=500&resolved=false";

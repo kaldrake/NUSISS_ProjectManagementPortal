@@ -115,4 +115,16 @@ describe('DashboardPage', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to load projects'));
   });
+
+  test('handles projects without optional counts or repositories', async () => {
+    getProjects.mockResolvedValue([{ id: '1', name: 'Bare', ownerId: 1, createdAt: '2026-01-01T00:00:00' }]);
+
+    renderPage();
+
+    await screen.findByText('Bare');
+    expect(screen.getByText('Total Projects').nextSibling).toHaveTextContent('1');
+    expect(screen.getByText('Repositories').nextSibling).toHaveTextContent('0');
+    expect(screen.getByText('Vulnerabilities').nextSibling).toHaveTextContent('0');
+    expect(screen.getByText('Critical Issues').nextSibling).toHaveTextContent('0');
+  });
 });

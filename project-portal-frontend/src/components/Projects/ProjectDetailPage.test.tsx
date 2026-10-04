@@ -14,7 +14,13 @@ jest.mock('react-router-dom', () => ({
 }));
 jest.mock('react-hot-toast', () => ({ __esModule: true, default: { success: jest.fn(), error: jest.fn() } }));
 jest.mock('../../services/project.service', () => ({
-  projectService: { getProject: jest.fn(), getRepositories: jest.fn(), deleteProject: jest.fn(), triggerScan: jest.fn() },
+  projectService: {
+    getProject: jest.fn(),
+    getRepositories: jest.fn(),
+    deleteProject: jest.fn(),
+    triggerScan: jest.fn(),
+    addRepository: jest.fn(),
+  },
 }));
 jest.mock('../../services/scan.service', () => ({
   scanService: { getVulnerabilitiesByProject: jest.fn() },
@@ -205,5 +211,29 @@ describe('ProjectDetailPage', () => {
     expect(await screen.findByText('Add GitHub Repository')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByText('Add GitHub Repository')).not.toBeInTheDocument());
+  });
+
+  test('a repository added from the dialog reloads the project data', async () => {
+    loadSuccessfully();
+    projects.addRepository.mockResolvedValue({});
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 5, name: 'app', full_name: 'acme/app', clone_url: 'https://github.com/acme/app.git', default_branch: 'main' }),
+    });
+    renderPage();
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Add Repository' }))[0]);
+    fireEvent.change(await screen.findByPlaceholderText('https://github.com/username/repository'), {
+      target: { value: 'https://github.com/acme/app' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Validate' }));
+    await screen.findByText(/✓/);
+    const addButtons = screen.getAllByRole('button', { name: 'Add Repository' });
+    fireEvent.click(addButtons[addButtons.length - 1]);
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Repository added successfully'));
+    expect(projects.addRepository).toHaveBeenCalled();
+    await waitFor(() => expect(projects.getProject.mock.calls.length).toBeGreaterThan(1));
+    delete (global as any).fetch;
   });
 });

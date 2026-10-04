@@ -243,4 +243,76 @@ class GeminiServiceTest {
         assertFalse(minor.isBlank());
         assertFalse(critical.equals(minor));
     }
+
+    // ---------------------------------------------------------------- more degraded responses
+
+    @Test
+    void truncatedJson_withOnlyAnExplanation_isSalvaged() throws Exception {
+        respondWith(geminiBody("{\"explanation\": \"Only the risk made it\"", "STOP"));
+
+        AiSuggestionResult result = service.generateFixSuggestion(vulnerability("anything", "BLOCKER"));
+
+        assertEquals("Only the risk made it", result.getSuggestionText());
+        assertEquals(0.35, result.getConfidenceScore(), 0.0001);
+    }
+
+    @Test
+    void truncatedJson_withOnlySteps_isSalvaged() throws Exception {
+        respondWith(geminiBody("{\"steps\": \"Rotate the key", "STOP"));
+
+        AiSuggestionResult result = service.generateFixSuggestion(vulnerability("anything", "BLOCKER"));
+
+        assertEquals("Rotate the key", result.getSuggestionText());
+    }
+
+    @Test
+    void truncatedJson_withEmptyFields_fallsBackToTheRawText() throws Exception {
+        respondWith(geminiBody("{\"explanation\": \"\", \"steps\": \"", "STOP"));
+
+        AiSuggestionResult result = service.generateFixSuggestion(vulnerability("anything", "BLOCKER"));
+
+        assertFalse(result.isUsedFallback());
+        assertEquals(0.35, result.getConfidenceScore(), 0.0001);
+    }
+
+    @Test
+    void emptyModelText_returnsAnEmptySuggestionAtIncompleteConfidence() throws Exception {
+        respondWith(geminiBody("   ", "STOP"));
+
+        AiSuggestionResult result = service.generateFixSuggestion(vulnerability("anything", "BLOCKER"));
+
+        assertEquals("", result.getSuggestionText());
+        assertEquals(0.4, result.getConfidenceScore(), 0.0001);
+    }
+
+    @Test
+    void fenceWithoutANewline_isStillHandled() throws Exception {
+        respondWith(geminiBody("```{\"explanation\":\"a\",\"steps\":\"b\",\"code_example\":\"c\",\"confidence\":0.9}```", "STOP"));
+
+        AiSuggestionResult result = service.generateFixSuggestion(vulnerability("anything", "BLOCKER"));
+
+        assertFalse(result.isUsedFallback());
+    }
+
+    @Test
+    void responseWithoutABody_fallsBackToTemplate() {
+        respondWith(null);
+
+        AiSuggestionResult result = service.generateFixSuggestion(vulnerability("anything", "BLOCKER"));
+
+        assertTrue(result.isUsedFallback());
+    }
+
+    @Test
+    void findingWithoutTypeOrLine_stillBuildsAPrompt() throws Exception {
+        respondWith(geminiBody("{\"explanation\":\"a\",\"steps\":\"b\",\"code_example\":\"c\",\"confidence\":0.8}", "STOP"));
+        Vulnerability bare = new Vulnerability();
+        bare.setId(2L);
+        bare.setMessage("bare");
+        bare.setSeverity("MAJOR");
+
+        AiSuggestionResult result = service.generateFixSuggestion(bare);
+
+        assertFalse(result.isUsedFallback());
+    }
 }

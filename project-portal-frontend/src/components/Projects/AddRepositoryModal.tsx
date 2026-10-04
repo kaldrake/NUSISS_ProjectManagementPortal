@@ -46,7 +46,7 @@ const AddRepositoryModal: React.FC<AddRepositoryModalProps> = ({
         url = url.slice(0, -4);
       }
       
-      const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+      const match = /github\.com\/([^/]+)\/([^/]+)/.exec(url);
       if (!match) {
         toast.error('Invalid GitHub URL format');
         setRepoValid(false);

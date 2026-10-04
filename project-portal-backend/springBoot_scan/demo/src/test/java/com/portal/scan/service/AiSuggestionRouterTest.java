@@ -23,7 +23,7 @@ class AiSuggestionRouterTest {
         claudeService = Mockito.mock(ClaudeService.class);
         deepSeekService = Mockito.mock(DeepSeekService.class);
         geminiService = Mockito.mock(GeminiService.class);
-        router = new AiSuggestionRouter(claudeService, deepSeekService, geminiService);
+        router = new AiSuggestionRouter(claudeService, deepSeekService, geminiService, "gemini");
     }
 
     @Test
@@ -62,5 +62,43 @@ class AiSuggestionRouterTest {
         AiSuggestionResult real = new AiSuggestionResult("fix", "code", 0.8, false);
 
         assertEquals("gemini-test-model", router.getModelUsed(real));
+    }
+
+    @Test
+    void claudeProvider_routesToClaude() {
+        Vulnerability vulnerability = new Vulnerability();
+        AiSuggestionResult expected = new AiSuggestionResult("fix", "code", 0.9, false);
+        when(claudeService.generateFixSuggestion(vulnerability)).thenReturn(expected);
+        when(claudeService.getModel()).thenReturn("claude-test");
+        AiSuggestionRouter claudeRouter = new AiSuggestionRouter(claudeService, deepSeekService, geminiService, "Claude");
+
+        assertSame(expected, claudeRouter.generateFixSuggestion(vulnerability));
+        assertEquals("claude-test", claudeRouter.getModelUsed(expected));
+        verifyNoInteractions(geminiService, deepSeekService);
+    }
+
+    @Test
+    void deepseekProvider_routesToDeepSeek() {
+        Vulnerability vulnerability = new Vulnerability();
+        AiSuggestionResult expected = new AiSuggestionResult("fix", "code", 0.9, false);
+        when(deepSeekService.generateFixSuggestion(vulnerability)).thenReturn(expected);
+        when(deepSeekService.getModel()).thenReturn("deepseek-test");
+        AiSuggestionRouter deepSeekRouter = new AiSuggestionRouter(claudeService, deepSeekService, geminiService, " deepseek ");
+
+        assertSame(expected, deepSeekRouter.generateFixSuggestion(vulnerability));
+        assertEquals("deepseek-test", deepSeekRouter.getModelUsed(expected));
+        verifyNoInteractions(geminiService, claudeService);
+    }
+
+    @Test
+    void unknownOrMissingProvider_fallsBackToGemini() {
+        Vulnerability vulnerability = new Vulnerability();
+        AiSuggestionResult expected = new AiSuggestionResult("fix", "code", 0.9, false);
+        when(geminiService.generateFixSuggestion(vulnerability)).thenReturn(expected);
+
+        assertSame(expected, new AiSuggestionRouter(claudeService, deepSeekService, geminiService, "something-else")
+                .generateFixSuggestion(vulnerability));
+        assertSame(expected, new AiSuggestionRouter(claudeService, deepSeekService, geminiService, null)
+                .generateFixSuggestion(vulnerability));
     }
 }

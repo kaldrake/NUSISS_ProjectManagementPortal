@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,6 +25,9 @@ import java.util.stream.Collectors;
 public class ProjectService {
     
     private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
+
+    private static final String PROJECT_NOT_FOUND = "Project not found with id: ";
+    private static final String REPOSITORY_NOT_IN_PROJECT = "Repository does not belong to project: ";
     
     @Autowired
     private ProjectRepository projectRepository;
@@ -40,11 +44,15 @@ public class ProjectService {
     
     /**
      * Load a project and verify that the caller (userId from the JWT) owns it.
-     * 403 if owned by someone else; existing behaviour (RuntimeException) if missing.
+     * 403 if owned by someone else, 404 if the project does not exist.
      */
+    private Project findProject(Long projectId) {
+        return projectRepository.findById(projectId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, PROJECT_NOT_FOUND + projectId));
+    }
+
     private Project requireOwnedProject(Long projectId, Long userId) {
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        Project project = findProject(projectId);
         if (userId == null || !project.getOwnerId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't have access to this project");
         }
@@ -88,9 +96,9 @@ public class ProjectService {
         
         // Check if project with same name exists for this owner
         if (projectRepository.existsByNameAndOwnerId(createDTO.getName(), ownerId)) {
-            throw new RuntimeException("Project with name '" + createDTO.getName() + "' already exists");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project with name '" + createDTO.getName() + "' already exists");
         }
-        LocalDateTime currTS = LocalDateTime.now();
+        LocalDateTime currTS = LocalDateTime.now(ZoneId.systemDefault());
         Project project = new Project();
         project.setName(createDTO.getName());
         project.setDescription(createDTO.getDescription());
@@ -110,19 +118,18 @@ public class ProjectService {
     public ProjectResponseDTO updateProject(Long projectId, ProjectUpdateDTO updateDTO, Long ownerId) {
         log.info("Updating project ID: {} for owner: {}", projectId, ownerId);
         
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        Project project = findProject(projectId);
         
         // Verify ownership
         if (!project.getOwnerId().equals(ownerId)) {
-            throw new RuntimeException("You don't have permission to update this project");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't have permission to update this project");
         }
         
         if (updateDTO.getName() != null && !updateDTO.getName().isEmpty()) {
             // Check if new name conflicts with existing project
             if (!updateDTO.getName().equals(project.getName()) &&
                 projectRepository.existsByNameAndOwnerId(updateDTO.getName(), ownerId)) {
-                throw new RuntimeException("Project with name '" + updateDTO.getName() + "' already exists");
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Project with name '" + updateDTO.getName() + "' already exists");
             }
             project.setName(updateDTO.getName());
         }
@@ -131,7 +138,7 @@ public class ProjectService {
             project.setDescription(updateDTO.getDescription());
         }
         
-        project.setUpdatedAt(LocalDateTime.now());
+        project.setUpdatedAt(LocalDateTime.now(ZoneId.systemDefault()));
         
         Project updatedProject = projectRepository.save(project);
         log.info("Project updated successfully: {}", updatedProject.getId());
@@ -146,12 +153,11 @@ public class ProjectService {
     public void deleteProject(Long projectId, Long ownerId) {
         log.info("Deleting project ID: {} for owner: {}", projectId, ownerId);
         
-        Project project = projectRepository.findById(projectId)
-            .orElseThrow(() -> new RuntimeException("Project not found with id: " + projectId));
+        Project project = findProject(projectId);
         
         // Verify ownership
         if (!project.getOwnerId().equals(ownerId)) {
-            throw new RuntimeException("You don't have permission to delete this project");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You don't have permission to delete this project");
         }
         
         // Delete associated repositories first (cascade should handle, but explicit for safety)
@@ -191,7 +197,7 @@ public class ProjectService {
 
         // Check if repository already exists in this project
         if (gitHubRepositoryRepository.existsByProjectIdAndGithubRepoId(projectId, repositoryDTO.getGithubRepoId())) {
-            throw new RuntimeException("Repository already exists in this project");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Repository already exists in this project");
         }
         
         GitHubRepository repository = new GitHubRepository();
@@ -222,11 +228,11 @@ public class ProjectService {
         requireOwnedProject(projectId, userId);
 
         GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
-            .orElseThrow(() -> new RuntimeException("Repository not found with id: " + repositoryId));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Repository not found with id: " + repositoryId));
         
         // Verify repository belongs to the project
         if (!repository.getProjectId().equals(projectId)) {
-            throw new RuntimeException("Repository does not belong to project: " + projectId);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, REPOSITORY_NOT_IN_PROJECT + projectId);
         }
         
         gitHubRepositoryRepository.delete(repository);
@@ -249,11 +255,11 @@ public class ProjectService {
         try {
             // Get repository details
             GitHubRepository repository = gitHubRepositoryRepository.findById(repositoryId)
-                .orElseThrow(() -> new RuntimeException("Repository not found: " + repositoryId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Repository not found: " + repositoryId));
             
             // Verify repository belongs to project
             if (!repository.getProjectId().equals(projectId)) {
-                throw new RuntimeException("Repository does not belong to project: " + projectId);
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, REPOSITORY_NOT_IN_PROJECT + projectId);
             }
             
             // Call Scan Service
@@ -269,7 +275,7 @@ public class ProjectService {
                 log.info("Scan triggered successfully with ID: {}", scanResponse.getScanId());
                 
                 // Update last scan timestamp
-                gitHubRepositoryRepository.updateLastScanAt(repositoryId, LocalDateTime.now());
+                gitHubRepositoryRepository.updateLastScanAt(repositoryId, LocalDateTime.now(ZoneId.systemDefault()));
             } else {
                 log.error("Failed to trigger scan for repository: {}", repositoryId);
             }

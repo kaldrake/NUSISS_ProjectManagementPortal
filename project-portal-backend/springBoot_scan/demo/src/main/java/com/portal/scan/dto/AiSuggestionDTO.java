@@ -11,7 +11,9 @@ public class AiSuggestionDTO {
     private String modelUsed;
     private LocalDateTime generatedAt;
     
-    public AiSuggestionDTO() {}
+    public AiSuggestionDTO() {
+        // Required by Jackson for deserialisation
+    }
     
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

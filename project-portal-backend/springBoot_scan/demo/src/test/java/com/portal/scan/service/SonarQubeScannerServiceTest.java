@@ -13,6 +13,7 @@ import org.springframework.web.client.RestTemplate;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -134,6 +135,17 @@ class SonarQubeScannerServiceTest {
         server.verify();
     }
 
+    @Test
+    void waitForAnalysis_failsImmediately_whenTheAnalysisTaskFailed() {
+        server.expect(requestTo(HOST + "/api/ce/activity?component=proj"))
+                .andRespond(withSuccess("{\"tasks\":[{\"status\":\"FAILED\"}]}", MediaType.APPLICATION_JSON));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> ReflectionTestUtils.invokeMethod(service, "waitForAnalysis", "proj"));
+
+        assertTrue(ex.getMessage().contains("Analysis failed"));
+    }
+
     // ---------------------------------------------------------------- clone
 
     @Test
@@ -153,8 +165,10 @@ class SonarQubeScannerServiceTest {
     }
 
     @Test
-    void cloneRepository_clonesALocalRepository(@TempDir Path origin) throws Exception {
+    void cloneRepository_clonesALocalRepository(@TempDir Path origin, @TempDir Path workspace) throws Exception {
         assumeTrue(gitIsAvailable(), "git is not installed");
+        ReflectionTestUtils.setField(service, "workDir", workspace.toString());
+        ReflectionTestUtils.setField(service, "gitPath", "git");
         run(origin, "git", "init", "-b", "main");
         run(origin, "git", "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "--allow-empty", "-m", "init");
 
@@ -198,5 +212,71 @@ class SonarQubeScannerServiceTest {
     @Test
     void cleanup_doesNotThrow_whenThePathDoesNotExist() {
         ReflectionTestUtils.invokeMethod(service, "cleanup", "/tmp/this-path-does-not-exist-" + System.nanoTime());
+    }
+
+    // ---------------------------------------------------------------- pipeline with stub executables
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name").toLowerCase().contains("win");
+    }
+
+    private Path stubTool(Path dir, String name, int exitCode) throws Exception {
+        Path script = dir.resolve(name);
+        Files.writeString(script, "#!/bin/sh\necho \"stub " + name + "\"\nexit " + exitCode + "\n");
+        assertTrue(script.toFile().setExecutable(true));
+        return script;
+    }
+
+    @Test
+    void scanRepository_runsCloneScanAndFetchesIssues_thenCleansUp(@TempDir Path tools, @TempDir Path workspace) throws Exception {
+        assumeTrue(!isWindows(), "stub shell scripts need a POSIX shell");
+        ReflectionTestUtils.setField(service, "gitPath", stubTool(tools, "git", 0).toString());
+        ReflectionTestUtils.setField(service, "sonarScannerPath", stubTool(tools, "sonar-scanner", 0).toString());
+        ReflectionTestUtils.setField(service, "workDir", workspace.toString());
+        server.expect(requestTo(HOST + "/api/ce/activity?component=proj"))
+                .andRespond(withSuccess("{\"tasks\":[{\"status\":\"SUCCESS\"}]}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(ISSUES_URL)).andRespond(withSuccess(
+                "{\"issues\":[{\"rule\":\"r\",\"type\":\"VULNERABILITY\",\"severity\":\"CRITICAL\",\"component\":\"proj:A.java\",\"line\":4,\"message\":\"m\"}]}",
+                MediaType.APPLICATION_JSON));
+
+        List<SonarQubeIssue> issues = service.scanRepository("https://example.com/acme/app.git", "main", "proj");
+
+        assertEquals(1, issues.size());
+        assertEquals("CRITICAL", issues.get(0).getSeverity());
+        server.verify();
+        try (Stream<Path> left = Files.list(workspace)) {
+            assertEquals(0, left.count(), "the clone directory should have been removed");
+        }
+    }
+
+    @Test
+    void cloneRepository_fails_whenGitExitsWithAnError(@TempDir Path tools, @TempDir Path workspace) throws Exception {
+        assumeTrue(!isWindows(), "stub shell scripts need a POSIX shell");
+        ReflectionTestUtils.setField(service, "gitPath", stubTool(tools, "git", 128).toString());
+        ReflectionTestUtils.setField(service, "workDir", workspace.toString());
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> ReflectionTestUtils.invokeMethod(service, "cloneRepository", "https://example.com/acme/app.git", "main"));
+
+        assertTrue(ex.getMessage().contains("exit code: 128"));
+    }
+
+    @Test
+    void runSonarScanner_fails_whenTheScannerExitsWithAnError(@TempDir Path tools, @TempDir Path workDir) throws Exception {
+        assumeTrue(!isWindows(), "stub shell scripts need a POSIX shell");
+        ReflectionTestUtils.setField(service, "sonarScannerPath", stubTool(tools, "sonar-scanner", 3).toString());
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> ReflectionTestUtils.invokeMethod(service, "runSonarScanner", workDir.toString(), "proj"));
+
+        assertTrue(ex.getMessage().contains("exit code: 3"));
+    }
+
+    @Test
+    void runSonarScanner_succeeds_whenTheScannerExitsCleanly(@TempDir Path tools, @TempDir Path workDir) throws Exception {
+        assumeTrue(!isWindows(), "stub shell scripts need a POSIX shell");
+        ReflectionTestUtils.setField(service, "sonarScannerPath", stubTool(tools, "sonar-scanner", 0).toString());
+
+        ReflectionTestUtils.invokeMethod(service, "runSonarScanner", workDir.toString(), "proj");
     }
 }

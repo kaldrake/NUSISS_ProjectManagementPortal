@@ -23,6 +23,10 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final String MESSAGE = "message";
+    private static final String USERNAME = "username";
+    private static final String EMAIL = "email";
+
     @Autowired private AuthenticationManager authenticationManager;
     @Autowired private UserRepository userRepository;
     @Autowired private UserDetailsService userDetailsService;
@@ -36,7 +40,7 @@ public class AuthController {
                     new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
         } catch (BadCredentialsException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Invalid username or password"));
+                    .body(Map.of(MESSAGE, "Invalid username or password"));
         }
         User user = userRepository.findByUsername(request.getUsername()).orElseThrow();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
@@ -45,8 +49,8 @@ public class AuthController {
                 "token", token,
                 "user", Map.of(
                         "id", user.getId(),
-                        "username", user.getUsername(),
-                        "email", user.getEmail(),
+                        USERNAME, user.getUsername(),
+                        EMAIL, user.getEmail(),
                         "role", user.getRole()
                 )
         ));
@@ -55,9 +59,9 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO request) {
         if (userRepository.existsByUsername(request.getUsername()))
-            return ResponseEntity.badRequest().body(Map.of("message", "Username is already taken"));
+            return ResponseEntity.badRequest().body(Map.of(MESSAGE, "Username is already taken"));
         if (userRepository.existsByEmail(request.getEmail()))
-            return ResponseEntity.badRequest().body(Map.of("message", "Email is already registered"));
+            return ResponseEntity.badRequest().body(Map.of(MESSAGE, "Email is already registered"));
 
         User user = new User();
         user.setUsername(request.getUsername());
@@ -72,8 +76,8 @@ public class AuthController {
                 "token", token,
                 "user", Map.of(
                         "id", user.getId(),
-                        "username", user.getUsername(),
-                        "email", user.getEmail(),
+                        USERNAME, user.getUsername(),
+                        EMAIL, user.getEmail(),
                         "role", user.getRole()
                 )
         ));
@@ -87,8 +91,8 @@ public class AuthController {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return ResponseEntity.ok(Map.of(
                 "id", user.getId(),
-                "username", user.getUsername(),
-                "email", user.getEmail(),
+                USERNAME, user.getUsername(),
+                EMAIL, user.getEmail(),
                 "role", user.getRole()
         ));
     }
