@@ -2,7 +2,7 @@ name: Combined Security Scans (Separate Frontend/Backend)
 
 on:
   push:
-    branches: [main, feature-sonarCloud]
+    branches: [main, fix-vulnerabilities]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -13,7 +13,7 @@ env:
   ECR_REPOSITORY: nusiss_projectmanagementportal
 
 jobs:
-# =============================================
+mvn# =============================================
 # SNYK SCANS - Commented out due to scan limit
 # =============================================
 #  backend-snyk:
@@ -283,7 +283,7 @@ jobs:
   # BACKEND UNIT TESTS — runs mvn test for each service in parallel
   # =============================================
   backend-tests:
-    name: Backend Tests (${{ matrix.service.name }})
+    name: Backend Maven Tests (${{ matrix.service.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
