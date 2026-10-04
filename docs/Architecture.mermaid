@@ -6,33 +6,45 @@ graph TB
 
     subgraph "AWS (ap-southeast-2) · Default VPC"
 
-        subgraph "EC2 #1 web · t3.large · Elastic IP"
+        subgraph "web EC2 · t3.large · Elastic IP 13.238.251.255"
+            CADDY["🔒 Caddy
+HTTPS :443 (Let's Encrypt, auto-renew)
+:80 → redirect to HTTPS
+13-238-251-255.sslip.io"]
             FE["🌐 Frontend + Reverse Proxy
 React + TypeScript (Nginx)
-Port: 80 (public)
-/api/* → backend EC2s"]
+/api/* → *.portal.internal"]
             SQ["📊 SonarQube Server
 v9.9.5 LTS (Community)
 Port: 9001"]
             SQDB[("🐘 sonarqube_db
-PostgreSQL 13
-Port: 5432 (Docker network only)")]
+PostgreSQL 13")]
         end
 
-        subgraph "Backend EC2s · project-portal-backend-sg"
+        DNS["🧭 Route 53 private zone
+portal.internal
+login / project / scan → internal ALB
+web → web EC2"]
+
+        ALB["⚖️ Internal Application Load Balancer
+:8081 → login · :8082 → project · :8083 → scan
+health check: /health"]
+
+        subgraph "Auto Scaling Groups · 1–3 instances each · target 60% avg CPU"
             LS["🔐 Login Service
-EC2 #2 · t3.small
-Spring Boot 3.5 (Java 17)
-Port: 8081"]
+project-portal-login-asg · t3.small
+Spring Boot 3.5 (Java 17) :8081"]
             PS["📁 Project Service
-EC2 #3 · t3.small
-Spring Boot 3.5 (Java 17)
-Port: 8082"]
+project-portal-project-asg · t3.small
+Spring Boot 3.5 (Java 17) :8082"]
             SCS["🔍 Scan Service
-EC2 #4 · t3.medium
-Spring Boot 3.5 (Java 17) + sonar-scanner
-Port: 8083"]
+project-portal-scan-asg · t3.medium
+Spring Boot 3.5 + sonar-scanner :8083"]
         end
+
+        SSM["🗝️ SSM Parameter Store
+/portal/&lt;role&gt;/env (encrypted)
+/portal/&lt;role&gt;/compose · /portal/image-tag"]
 
         subgraph "Amazon RDS · MySQL 8.4 · db.t4g.micro (private, TLS)"
             LDB[("🗄️ login_db
@@ -55,39 +67,48 @@ Repository Hosting"]
 DeepSeek (active) · Gemini / Claude (configurable)"]
     end
 
-    %% User to Frontend
-    User -->|"HTTP :80"| FE
+    %% User to the web EC2
+    User -->|"HTTPS :443"| CADDY
+    CADDY -->|"HTTP (Docker network)"| FE
 
-    %% Nginx reverse proxy to backend EC2s (private IPs)
-    FE -->|"/api/auth, /api/login → :8081"| LS
-    FE -->|"/api/projects → :8082"| PS
-    FE -->|"/api/scans, /api/github → :8083"| SCS
+    %% Nginx to the services through the internal ALB
+    FE -->|"login / project / scan .portal.internal"| ALB
+    FE -.->|"name lookup"| DNS
+    ALB -->|":8081"| LS
+    ALB -->|":8082"| PS
+    ALB -->|":8083"| SCS
+
+    %% Service-to-service (through the ALB)
+    PS -->|"scan.portal.internal:8083 (trigger scan, results)"| ALB
 
     %% Services to their own databases on RDS
     LS -->|"JDBC (TLS)"| LDB
     PS -->|"JDBC (TLS)"| PDB
     SCS -->|"JDBC (TLS)"| SDB
 
-    %% Service-to-service
-    PS -->|"HTTP :8083 (trigger scan, results)"| SCS
-
     %% Scan Service to SonarQube on the web EC2
-    SCS -->|"sonar-scanner CLI → HTTP :9001"| SQ
+    SCS -->|"sonar-scanner → web.portal.internal:9001"| SQ
     SQ -->|"JDBC"| SQDB
-    SQ -->|"Scan Results"| SCS
 
     %% External integrations
     SCS -->|"Git Clone (source code)"| GH
     SCS -->|"REST API (AI suggestions)"| AI
 
-    %% CI/CD deploys images from ECR
-    ECR -.->|"docker pull (deployment)"| FE
-    ECR -.->|"docker pull (deployment)"| LS
-    ECR -.->|"docker pull (deployment)"| PS
-    ECR -.->|"docker pull (deployment)"| SCS
+    %% Instance bootstrap: config + images
+    SSM -.->|"config at boot (start.sh)"| LS
+    SSM -.->|"config at boot"| PS
+    SSM -.->|"config at boot"| SCS
+    ECR -.->|"docker pull"| LS
+    ECR -.->|"docker pull"| PS
+    ECR -.->|"docker pull"| SCS
+    ECR -.->|"docker pull"| FE
 
     %% Styling
+    style CADDY fill:#22863a,color:#fff
     style FE fill:#4CAF50,color:#fff
+    style ALB fill:#e65100,color:#fff
+    style DNS fill:#5c6bc0,color:#fff
+    style SSM fill:#5c6bc0,color:#fff
     style LS fill:#2196F3,color:#fff
     style PS fill:#2196F3,color:#fff
     style SCS fill:#2196F3,color:#fff

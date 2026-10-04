@@ -56,19 +56,30 @@ frontend-{sha}"]
         ECR[("📦 nusiss_projectmanagementportal")]
     end
 
-    subgraph "GitHub Actions: deploy-backends (parallel · SSH via web EC2)"
-        D1["login EC2
-deploy.sh {sha} + /health"]
-        D2["project EC2
-deploy.sh {sha} + /health"]
-        D3["scan EC2
-deploy.sh {sha} + /health"]
+    subgraph "GitHub Actions: deploy-backends (parallel · one job per Auto Scaling Group)"
+        SSMPUB["Publish to SSM Parameter Store
+/portal/&lt;role&gt;/compose
+/portal/image-tag = {sha}"]
+        D1["project-portal-login-asg
+instance refresh"]
+        D2["project-portal-project-asg
+instance refresh"]
+        D3["project-portal-scan-asg
+instance refresh"]
     end
 
-    subgraph "GitHub Actions: deploy-web (only if all backends healthy)"
-        DW["web EC2
-deploy.sh {sha}
-frontend + reachability of each backend"]
+    subgraph "Instance refresh (per group, zero downtime)"
+        R1["Launch new instance
+boot: read SSM config, pull {sha}"]
+        R2["ALB /health passes
++ 120 s warm-up"]
+        R3["Terminate old instance"]
+    end
+
+    subgraph "GitHub Actions: deploy-web (only if all groups refreshed)"
+        DW["web EC2 (SSH)
+deploy.sh {sha} · Caddy + frontend
+checks HTTPS certificate + each service via the ALB"]
     end
 
     Code --> Commit --> Push
@@ -81,7 +92,10 @@ frontend + reachability of each backend"]
     B2 --> T2 --> ECR
     B3 --> T3 --> ECR
     B4 --> T4 --> ECR
-    ECR --> D1 & D2 & D3
+    ECR --> SSMPUB
+    SSMPUB --> D1 & D2 & D3
+    D1 & D2 & D3 -.-> R1
+    R1 --> R2 --> R3
     D1 & D2 & D3 --> DW
 
     %% Styling
@@ -101,5 +115,9 @@ frontend + reachability of each backend"]
     style D2 fill:#0ea5e9,color:#fff
     style D3 fill:#0ea5e9,color:#fff
     style DW fill:#10b981,color:#fff
+    style SSMPUB fill:#5c6bc0,color:#fff
+    style R1 fill:#64748b,color:#fff
+    style R2 fill:#64748b,color:#fff
+    style R3 fill:#64748b,color:#fff
     style Snyk fill:#f59e0b,color:#fff
     style SonarCI fill:#0d9488,color:#fff
