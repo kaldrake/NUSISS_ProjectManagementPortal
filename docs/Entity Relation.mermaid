@@ -52,6 +52,7 @@ erDiagram
         BIGINT      id                  PK
         BIGINT      project_id          "FK → projects.id (cross-service)"
         BIGINT      repository_id       "FK → repositories.id (cross-service)"
+        BIGINT      owner_id            "user who triggered the scan (JWT userId)"
         VARCHAR(500) repository_url
         VARCHAR(50) branch
         VARCHAR(20) scan_status         "PENDING | SCANNING | COMPLETED | FAILED"

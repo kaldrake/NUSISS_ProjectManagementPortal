@@ -19,7 +19,11 @@ public class Scan {
     
     @Column(name = "repository_id", nullable = false)
     private Long repositoryId;
-    
+
+    // User who triggered the scan (from the JWT); used to enforce per-user access to results
+    @Column(name = "owner_id")
+    private Long ownerId;
+
     @Column(name = "repository_url", nullable = false)
     private String repositoryUrl;
     
@@ -77,6 +81,9 @@ public class Scan {
     
     public Long getRepositoryId() { return repositoryId; }
     public void setRepositoryId(Long repositoryId) { this.repositoryId = repositoryId; }
+
+    public Long getOwnerId() { return ownerId; }
+    public void setOwnerId(Long ownerId) { this.ownerId = ownerId; }
     
     public String getRepositoryUrl() { return repositoryUrl; }
     public void setRepositoryUrl(String repositoryUrl) { this.repositoryUrl = repositoryUrl; }

@@ -45,14 +45,17 @@ sequenceDiagram
         GRR-->>PS: GitHubRepository (cloneUrl, defaultBranch)
         PS->>SC: triggerScan(pid, rid, cloneUrl, branch, jwt)
         SC->>JS: POST /api/scans/analyze (Bearer JWT, ScanRequestDTO)
-        JS->>SCC: token valid, authenticated request
-        SCC->>SS: scanRepository(request) @Async
-        SCC-->>SC: 202 ACCEPTED (status only, no scanId)
+        JS->>SCC: token valid, userId claim set as request attribute
+        SCC->>SS: createScan(request, userId)
+        SS->>DB: INSERT scans (status PENDING, owner_id = userId)
+        SCC->>SS: runScan(scanId, request) @Async
+        SCC-->>SC: 202 ACCEPTED (with scanId)
+        PS->>GRR: updateLastScanAt(rid) (scanId was returned)
     end
 
     rect rgb(230, 245, 255)
         Note over SS,DB: Background thread 2 (scan-service), one long @Transactional
-        SS->>DB: INSERT scans (status SCANNING)
+        SS->>DB: UPDATE scans SET status SCANNING
         SS->>DB: UPDATE scans SET sonarqube_project_key = project_pid_scan_id
         SS->>SQS: scanRepository(repoUrl, branch, projectKey)
         SQS->>SQS: git clone --depth 1 --single-branch (ProcessBuilder, 2 min timeout)

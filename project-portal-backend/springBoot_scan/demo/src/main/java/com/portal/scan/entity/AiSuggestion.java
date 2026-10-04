@@ -26,7 +26,7 @@ public class AiSuggestion {
     private Double confidenceScore = 0.85;
     
     @Column(name = "model_used")
-    private String modelUsed = "deepseek-chat";
+    private String modelUsed = "gemini-flash-latest";
     
     @Column(name = "generated_at")
     private LocalDateTime generatedAt;

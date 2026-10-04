@@ -95,7 +95,10 @@ public class SonarQubeScannerService {
         pb.directory(new File(repoPath));
         pb.redirectErrorStream(true);
         
-        log.info("Running command: {}", String.join(" ", pb.command()));
+        // Mask the token so it never reaches the logs
+        log.info("Running command: {}", pb.command().stream()
+            .map(arg -> arg.startsWith("-Dsonar.login=") ? "-Dsonar.login=****" : arg)
+            .collect(java.util.stream.Collectors.joining(" ")));
         
         Process process = pb.start();
         
