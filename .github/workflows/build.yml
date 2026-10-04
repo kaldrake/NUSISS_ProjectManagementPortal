@@ -13,7 +13,7 @@ env:
   ECR_REPOSITORY: nusiss_projectmanagementportal
 
 jobs:
-mvn# =============================================
+# =============================================
 # SNYK SCANS - Commented out due to scan limit
 # =============================================
 #  backend-snyk:
