@@ -1,0 +1,104 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
+flowchart LR
+    subgraph "Developer"
+        Code[Write Code]
+        Commit[git commit]
+        Push["git push
+(main / feature-sonarCloud; PRs to main)"]
+    end
+
+    subgraph "GitHub Actions: docker-build-push"
+
+        Checkout[Checkout Code<br>actions/checkout@v4]
+
+        subgraph "AWS Auth"
+            AWSCreds[Configure AWS Credentials<br>Access Key + Secret Key]
+            ECRLogin[Login to Amazon ECR<br>amazon-ecr-login@v2]
+        end
+
+        subgraph "Docker Build × 4"
+            B1["Build login-service
+project-portal-backend/springBoot_login"]
+            B2["Build project-service
+project-portal-backend/springBoot_project"]
+            B3["Build scan-service
+project-portal-backend/springBoot_scan"]
+            B4["Build frontend
+project-portal-frontend (Nginx)"]
+        end
+
+        subgraph "Push to ECR (2 tags each)"
+            T1["login-latest
+login-{sha}"]
+            T2["project-latest
+project-{sha}"]
+            T3["scan-latest
+scan-{sha}"]
+            T4["frontend-latest
+frontend-{sha}"]
+        end
+
+        Output[Output Image URIs]
+    end
+
+    subgraph "AWS ECR (ap-southeast-1)"
+        ECR[("📦 nusiss_projectmanagementportal 4 image repositories")]
+    end
+
+    subgraph "AWS ECS Fargate (ap-southeast-1)"
+        FDeploy["Task Definitions reference*-latest image tags"]
+        F1["login-service task"]
+        F2["project-service task"]
+        F3["scan-service task"]
+        F4["frontend task"]
+    end
+
+    subgraph "GitHub Actions: sonarcloud-scan"
+        SonarCI["📊 SonarCloud Scan Single shared project · monorepo (3 backend services + frontend). Runs mvn test + JaCoCo and Jest coverage, quality gate on new code"]
+    end
+
+    subgraph "GitHub Actions: backend-tests"
+        Tests["✅ Backend Maven Tests Matrix: login / project / scan (mvn test, JaCoCo reports)"]
+    end
+
+    subgraph "GitHub Actions: snyk-scan"
+        Snyk["🛡️ Snyk Dependency Scan Matrix: login / project / scan + frontend package.json"]
+    end
+
+    Code --> Commit --> Push 
+    Push --> Snyk
+    Push --> SonarCI
+    Push --> Tests
+    Snyk -->|"needs"| Checkout
+    Checkout --> AWSCreds --> ECRLogin
+    ECRLogin --> B1 & B2 & B3 & B4
+    B1 --> T1 --> ECR
+    B2 --> T2 --> ECR
+    B3 --> T3 --> ECR
+    B4 --> T4 --> ECR
+    ECR --> Output
+    ECR -.->|"manual redeploy pulls :latest"| FDeploy
+    FDeploy --> F1 & F2 & F3 & F4
+
+    %% Styling
+    style Checkout fill:#f97316,color:#fff
+    style AWSCreds fill:#FF9800,color:#fff
+    style ECRLogin fill:#FF9800,color:#fff
+    style B1 fill:#8b5cf6,color:#fff
+    style B2 fill:#8b5cf6,color:#fff
+    style B3 fill:#8b5cf6,color:#fff
+    style B4 fill:#8b5cf6,color:#fff
+    style T1 fill:#3b82f6,color:#fff
+    style T2 fill:#3b82f6,color:#fff
+    style T3 fill:#3b82f6,color:#fff
+    style T4 fill:#3b82f6,color:#fff
+    style ECR fill:#FF9800,color:#fff
+    style Output fill:#10b981,color:#fff
+    style FDeploy fill:#10b981,color:#fff
+    style F1 fill:#0ea5e9,color:#fff
+    style F2 fill:#0ea5e9,color:#fff
+    style F3 fill:#0ea5e9,color:#fff
+    style F4 fill:#0ea5e9,color:#fff
+    style Snyk fill:#f59e0b,color:#fff
+    style SonarCI fill:#0d9488,color:#fff
+    style Tests fill:#16a34a,color:#fff

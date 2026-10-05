@@ -1,93 +1,104 @@
 %%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
-flowchart LR
+flowchart TB
     subgraph "Developer"
         Code[Write Code]
         Commit[git commit]
-        Push["git push
-(main / feature-sonarCloud; PRs to main)"]
+        Push["git push<br>(main / fix-vulnerabilities; PRs to main)"]
     end
 
-    subgraph "GitHub Actions: docker-build-push"
+    subgraph "Stage 1 · dependency-scan (fail fast, starts first)"
+        DepScan["🛡️ Snyk Open Source<br>login / project / scan pom.xml + frontend package-lock<br>fails on high / critical findings that have a fix"]
+    end
 
-        Checkout[Checkout Code<br>actions/checkout@v4]
+    subgraph "Stage 2 · tests (need dependency-scan)"
+        BTests["✅ backend-tests<br>mvn test · matrix: login / project / scan"]
+        FTests["✅ frontend-tests<br>Jest · npm test"]
+    end
 
-        subgraph "AWS Auth"
+    subgraph "snyk-monitor (push only, non-blocking)"
+        Monitor["📡 snyk monitor<br>uploads dependency snapshots to the Snyk dashboard"]
+    end
+
+    subgraph "Stage 3 · sonarcloud-scan (needs both test jobs)"
+        SonarCI["📊 SonarCloud SAST · single shared project<br>mvn test + JaCoCo, Jest coverage<br>fails when the quality gate fails"]
+    end
+
+    subgraph "Stage 4 · docker-build-push (needs sonarcloud-scan)"
+        subgraph "Docker Build × 4"
+            B1["Build login-service<br>project-portal-backend/springBoot_login"]
+            B2["Build project-service<br>project-portal-backend/springBoot_project"]
+            B3["Build scan-service<br>project-portal-backend/springBoot_scan"]
+            B4["Build frontend<br>project-portal-frontend (Nginx)"]
+        end
+
+        subgraph "Snyk Container scan × 4"
+            S1["Scan login image<br>--fail-on=upgradable"]
+            S2["Scan project image<br>--fail-on=upgradable"]
+            S3["Scan scan image<br>--fail-on=upgradable"]
+            S4["Scan frontend image<br>--fail-on=upgradable"]
+        end
+
+        subgraph "AWS Auth (only after all scans pass)"
             AWSCreds[Configure AWS Credentials<br>Access Key + Secret Key]
             ECRLogin[Login to Amazon ECR<br>amazon-ecr-login@v2]
         end
 
-        subgraph "Docker Build × 4"
-            B1["Build login-service
-project-portal-backend/springBoot_login"]
-            B2["Build project-service
-project-portal-backend/springBoot_project"]
-            B3["Build scan-service
-project-portal-backend/springBoot_scan"]
-            B4["Build frontend
-project-portal-frontend (Nginx)"]
-        end
-
         subgraph "Push to ECR (2 tags each)"
-            T1["login-latest
-login-{sha}"]
-            T2["project-latest
-project-{sha}"]
-            T3["scan-latest
-scan-{sha}"]
-            T4["frontend-latest
-frontend-{sha}"]
+            T1["login-latest<br>login-{sha}"]
+            T2["project-latest<br>project-{sha}"]
+            T3["scan-latest<br>scan-{sha}"]
+            T4["frontend-latest<br>frontend-{sha}"]
         end
 
         Output[Output Image URIs]
     end
 
     subgraph "AWS ECR (ap-southeast-1)"
-        ECR[("📦 nusiss_projectmanagementportal 4 image repositories")]
+        ECR[("📦 nusiss_projectmanagementportal<br>4 image repositories")]
     end
 
     subgraph "AWS ECS Fargate (ap-southeast-1)"
-        FDeploy["Task Definitions reference*-latest image tags"]
+        FDeploy["Task Definitions reference<br>*-latest image tags"]
         F1["login-service task"]
         F2["project-service task"]
         F3["scan-service task"]
         F4["frontend task"]
     end
 
-    subgraph "GitHub Actions: sonarcloud-scan"
-        SonarCI["📊 SonarCloud Scan Single shared project · monorepo (3 backend services + frontend). Runs mvn test + JaCoCo and Jest coverage, quality gate on new code"]
-    end
-
-    subgraph "GitHub Actions: backend-tests"
-        Tests["✅ Backend Maven Tests Matrix: login / project / scan (mvn test, JaCoCo reports)"]
-    end
-
-    subgraph "GitHub Actions: snyk-scan"
-        Snyk["🛡️ Snyk Dependency Scan Matrix: login / project / scan + frontend package.json"]
-    end
-
-    Code --> Commit --> Push 
-    Push --> Snyk
-    Push --> SonarCI
-    Push --> Tests
-    Snyk -->|"needs"| Checkout
-    Checkout --> AWSCreds --> ECRLogin
-    ECRLogin --> B1 & B2 & B3 & B4
-    B1 --> T1 --> ECR
-    B2 --> T2 --> ECR
-    B3 --> T3 --> ECR
-    B4 --> T4 --> ECR
+    Code --> Commit --> Push
+    Push --> DepScan
+    DepScan -->|"pass"| BTests & FTests
+    DepScan -.->|"push only"| Monitor
+    BTests -->|"pass"| SonarCI
+    FTests -->|"pass"| SonarCI
+    SonarCI -->|"quality gate passed"| B1 & B2 & B3 & B4
+    B1 --> S1
+    B2 --> S2
+    B3 --> S3
+    B4 --> S4
+    S1 & S2 & S3 & S4 -->|"no fixable high / critical findings"| AWSCreds --> ECRLogin
+    ECRLogin --> T1 & T2 & T3 & T4
+    T1 & T2 & T3 & T4 --> ECR
     ECR --> Output
     ECR -.->|"manual redeploy pulls :latest"| FDeploy
     FDeploy --> F1 & F2 & F3 & F4
 
     %% Styling
-    style Checkout fill:#f97316,color:#fff
-    style AWSCreds fill:#FF9800,color:#fff
-    style ECRLogin fill:#FF9800,color:#fff
+    style DepScan fill:#f59e0b,color:#fff
+    style Monitor fill:#b45309,color:#fff
+    style BTests fill:#16a34a,color:#fff
+    style FTests fill:#16a34a,color:#fff
+    style SonarCI fill:#0d9488,color:#fff
     style B1 fill:#8b5cf6,color:#fff
     style B2 fill:#8b5cf6,color:#fff
     style B3 fill:#8b5cf6,color:#fff
     style B4 fill:#8b5cf6,color:#fff
+    style S1 fill:#f59e0b,color:#fff
+    style S2 fill:#f59e0b,color:#fff
+    style S3 fill:#f59e0b,color:#fff
+    style S4 fill:#f59e0b,color:#fff
+    style AWSCreds fill:#FF9800,color:#fff
+    style ECRLogin fill:#FF9800,color:#fff
     style T1 fill:#3b82f6,color:#fff
     style T2 fill:#3b82f6,color:#fff
     style T3 fill:#3b82f6,color:#fff
@@ -99,6 +110,3 @@ frontend-{sha}"]
     style F2 fill:#0ea5e9,color:#fff
     style F3 fill:#0ea5e9,color:#fff
     style F4 fill:#0ea5e9,color:#fff
-    style Snyk fill:#f59e0b,color:#fff
-    style SonarCI fill:#0d9488,color:#fff
-    style Tests fill:#16a34a,color:#fff
