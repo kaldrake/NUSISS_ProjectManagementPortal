@@ -9,6 +9,9 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
+# Apply OS security patches the base image tag has not picked up yet (e.g. libexpat)
+RUN apk upgrade --no-cache
+
 # Copy the custom nginx config (file must exist)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
