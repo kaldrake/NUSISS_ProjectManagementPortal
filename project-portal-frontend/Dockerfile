@@ -18,6 +18,9 @@ RUN npm run build
 # Runtime stage - use nginx to serve static files
 FROM nginx:alpine
 
+# Apply OS security patches the base image tag has not picked up yet (e.g. libexpat)
+RUN apk upgrade --no-cache
+
 # Copy built files from build stage (CRA uses 'build', not 'dist')
 COPY --from=build /app/build /usr/share/nginx/html
 

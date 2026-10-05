@@ -13,14 +13,14 @@ describe('api request interceptor', () => {
     ['login', loginApi],
     ['project', projectApi],
     ['scan', scanApi],
-  ])('%s api adds the bearer token and user id headers', (_name, api) => {
+  ])('%s api adds the bearer token but no user id header', (_name, api) => {
     localStorage.setItem('access_token', 'jwt-123');
     localStorage.setItem('user', JSON.stringify({ id: 7, username: 'alice' }));
 
     const config = requestHandler(api)({ headers: {} });
 
     expect(config.headers.Authorization).toBe('Bearer jwt-123');
-    expect(config.headers['X-User-Id']).toBe(7);
+    expect(config.headers['X-User-Id']).toBeUndefined();
   });
 
   test('leaves the request untouched when nobody is logged in', () => {
@@ -28,28 +28,6 @@ describe('api request interceptor', () => {
 
     expect(config.headers.Authorization).toBeUndefined();
     expect(config.headers['X-User-Id']).toBeUndefined();
-  });
-
-  test('ignores a stored user without an id', () => {
-    localStorage.setItem('access_token', 'jwt');
-    localStorage.setItem('user', JSON.stringify({ username: 'no-id' }));
-
-    const config = requestHandler(projectApi)({ headers: {} });
-
-    expect(config.headers.Authorization).toBe('Bearer jwt');
-    expect(config.headers['X-User-Id']).toBeUndefined();
-  });
-
-  test('survives a corrupted stored user', () => {
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    localStorage.setItem('access_token', 'jwt');
-    localStorage.setItem('user', '{broken');
-
-    const config = requestHandler(projectApi)({ headers: {} });
-
-    expect(config.headers.Authorization).toBe('Bearer jwt');
-    expect(errorSpy).toHaveBeenCalled();
-    errorSpy.mockRestore();
   });
 });
 

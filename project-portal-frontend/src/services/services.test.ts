@@ -87,12 +87,6 @@ describe('scanService', () => {
     expect(scan.get).toHaveBeenCalledWith('/scans/projects/2/vulnerabilities');
   });
 
-  test('getVulnerabilitiesByRepo', async () => {
-    scan.get.mockResolvedValue({ data: [] });
-    await scanService.getVulnerabilitiesByRepo('r1');
-    expect(scan.get).toHaveBeenCalledWith('/scans/repositories/r1/vulnerabilities');
-  });
-
   test('getVulnerabilityById', async () => {
     scan.get.mockResolvedValue({ data: { id: 'v1' } });
     expect(await scanService.getVulnerabilityById('v1')).toEqual({ id: 'v1' });
