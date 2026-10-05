@@ -83,32 +83,41 @@ classDiagram
             +getScanHistory(repoId, userId)
             -requireOwnedScan(scanId, userId)
             -requireOwnedVulnerability(vulnId, userId)
+            -attachAiSuggestion(vuln)
+            -finishScan(scan, status, error)
             -saveScanSummary(scanId, issues)
         }
         class SonarQubeScannerService {
             <<Service>>
             +scanRepository(url, branch, key)
+            -createScanDirectory()
             -cloneRepository()
             -runSonarScanner()
             -waitForAnalysis()
+            -latestTaskStatus()
             -fetchIssues()
         }
         class AiSuggestionRouter {
             <<Service, facade>>
+            provider = ai.provider (AI_PROVIDER)
             +generateFixSuggestion(vuln)
             +getModelUsed(result)
         }
         class GeminiService {
             <<Service>>
-            active provider
+            default provider
         }
         class DeepSeekService {
             <<Service>>
-            standby, route commented out
+            selectable with AI_PROVIDER=deepseek
         }
         class ClaudeService {
             <<Service>>
-            standby, route commented out
+            selectable with AI_PROVIDER=claude
+        }
+        class FallbackSuggestionTemplates {
+            <<utility>>
+            +forVulnerability(vuln)
         }
         class AiSuggestionResult {
             suggestionText
@@ -176,10 +185,13 @@ classDiagram
     ScanController --> ScanService
     ScanService --> SonarQubeScannerService
     ScanService --> AiSuggestionRouter
-    AiSuggestionRouter --> GeminiService : active
-    AiSuggestionRouter ..> DeepSeekService : disabled
-    AiSuggestionRouter ..> ClaudeService : disabled
+    AiSuggestionRouter --> GeminiService : default
+    AiSuggestionRouter ..> DeepSeekService : AI_PROVIDER=deepseek
+    AiSuggestionRouter ..> ClaudeService : AI_PROVIDER=claude
     GeminiService ..> AiSuggestionResult : creates
+    GeminiService ..> FallbackSuggestionTemplates : fallback text
+    DeepSeekService ..> FallbackSuggestionTemplates : fallback text
+    ClaudeService ..> FallbackSuggestionTemplates : fallback text
     ScanService --> ScanRepository
     ScanService --> VulnerabilityRepository
     ScanService --> AiSuggestionRepository

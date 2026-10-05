@@ -7,11 +7,6 @@ export const scanService = {
     // Vulnerability Operations
     // =============================================
     
-    async getVulnerabilitiesByRepo(repoId: string): Promise<Vulnerability[]> {
-        const response = await scanApi.get<Vulnerability[]>(`/scans/repositories/${repoId}/vulnerabilities`);
-        return response.data;
-    },
-
     async getVulnerabilitiesByProject(projectId: string): Promise<Vulnerability[]> {
         const response = await scanApi.get<Vulnerability[]>(`/scans/projects/${projectId}/vulnerabilities`);
         return response.data;
