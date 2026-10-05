@@ -12,8 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -184,12 +182,6 @@ public class ScanServiceClient {
 				log.warn("No JWT token available for scan request");
 			}
 
-			Long userId = getCurrentUserId();
-			if (userId != null) {
-				headers.set("X-User-Id", String.valueOf(userId));
-				log.debug("Added X-User-Id: {}", userId);
-			}
-
 			// Build request body
 			Map<String, Object> requestBody = new HashMap<>();
 			requestBody.put("projectId", projectId);
@@ -250,7 +242,7 @@ public class ScanServiceClient {
 	}
 
 	/**
-	 * Create authenticated HTTP entity with JWT token and User ID
+	 * Create authenticated HTTP entity with the JWT token
 	 */
 	private HttpEntity<?> createAuthEntity() {
 		HttpHeaders headers = new HttpHeaders();
@@ -259,11 +251,6 @@ public class ScanServiceClient {
 		String token = getJwtToken();
 		if (token != null) {
 			headers.setBearerAuth(token);
-		}
-
-		Long userId = getCurrentUserId();
-		if (userId != null) {
-			headers.set("X-User-Id", String.valueOf(userId));
 		}
 
 		return new HttpEntity<>(headers);
@@ -283,23 +270,6 @@ public class ScanServiceClient {
 			}
 		} catch (Exception e) {
 			log.warn("Could not extract JWT token: {}", e.getMessage());
-		}
-		return null;
-	}
-
-	/**
-	 * Get current user ID from Spring Security context (set by
-	 * JwtAuthenticationFilter)
-	 */
-	private Long getCurrentUserId() {
-		try {
-			Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-			if (auth != null && auth.isAuthenticated()) {
-				// Principal is the username string set in JwtAuthenticationFilter
-				return null; // userId not available without DB lookup; X-User-Id header used instead
-			}
-		} catch (Exception e) {
-			log.warn("Could not get current user ID: {}", e.getMessage());
 		}
 		return null;
 	}

@@ -54,7 +54,11 @@ frontend-{sha}"]
     end
 
     subgraph "GitHub Actions: sonarcloud-scan"
-        SonarCI["📊 SonarCloud Scan Single shared project · monorepo (3 backend services + frontend)"]
+        SonarCI["📊 SonarCloud Scan Single shared project · monorepo (3 backend services + frontend). Runs mvn test + JaCoCo and Jest coverage, quality gate on new code"]
+    end
+
+    subgraph "GitHub Actions: backend-tests"
+        Tests["✅ Backend Maven Tests Matrix: login / project / scan (mvn test, JaCoCo reports)"]
     end
 
     subgraph "GitHub Actions: snyk-scan"
@@ -64,6 +68,7 @@ frontend-{sha}"]
     Code --> Commit --> Push 
     Push --> Snyk
     Push --> SonarCI
+    Push --> Tests
     Snyk -->|"needs"| Checkout
     Checkout --> AWSCreds --> ECRLogin
     ECRLogin --> B1 & B2 & B3 & B4
@@ -96,3 +101,4 @@ frontend-{sha}"]
     style F4 fill:#0ea5e9,color:#fff
     style Snyk fill:#f59e0b,color:#fff
     style SonarCI fill:#0d9488,color:#fff
+    style Tests fill:#16a34a,color:#fff

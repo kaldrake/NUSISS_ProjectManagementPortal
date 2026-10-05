@@ -15,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -80,7 +81,7 @@ class GitHubServiceTest {
     @Test
     void getUserRepositories_sendsNoAuthorization_whenNoTokenAtAll() {
         server.expect(requestTo(REPOS_URL))
-                .andExpect(request -> assertFalse(request.getHeaders().containsKey("Authorization")))
+                .andExpect(request -> assertNull(request.getHeaders().getFirst("Authorization")))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
 
         service.getUserRepositories("");

@@ -82,7 +82,7 @@ public class GeminiService {
 	}
 
 	private String requestUrl() {
-		return UriComponentsBuilder.fromHttpUrl(apiBaseUrl + "/" + model + ":generateContent")
+		return UriComponentsBuilder.fromUriString(apiBaseUrl + "/" + model + ":generateContent")
 				.queryParam("key", apiKey)
 				.toUriString();
 	}
