@@ -16,7 +16,7 @@ jobs:
 # =============================================
 # SNYK SCANS 
 # =============================================
-backend-snyk:
+  backend-snyk:
    name: Backend Snyk Scans
    runs-on: ubuntu-latest
    strategy:
@@ -89,7 +89,7 @@ backend-snyk:
          mv mvnw.bak mvnw 2>/dev/null || true
          mv mvnw.cmd.bak mvnw.cmd 2>/dev/null || true
 
-frontend-snyk:
+  frontend-snyk:
    name: Frontend Snyk Scan
    runs-on: ubuntu-latest
    steps:
@@ -131,7 +131,7 @@ frontend-snyk:
        env:
          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
 
-dependency-scan:
+  dependency-scan:
    name: Consolidated Dependency Scan
    runs-on: ubuntu-latest
    needs: [backend-snyk, frontend-snyk]
@@ -286,7 +286,7 @@ dependency-scan:
   # =============================================
   # BACKEND UNIT TESTS — runs mvn test for each service in parallel
   # =============================================
-backend-tests:
+  backend-tests:
     name: Backend Maven Tests (${{ matrix.service.name }})
     runs-on: ubuntu-latest
     strategy:
