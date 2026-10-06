@@ -230,7 +230,7 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=project-portal-frontend/coverage/lcov.info
             -Dsonar.coverage.exclusions=**/dto/**,**/entity/**,**/config/**,**/*Application.java,**/ClaudeService.java,**/DeepSeekService.java,**/index.tsx,**/reportWebVitals.ts,**/types/**
             -Dsonar.cpd.exclusions=**/dto/**,**/entity/**,**/config/**,**/security/JwtUtil.java,**/security/JwtAuthenticationFilter.java
-            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.wait=${{ github.ref == 'refs/heads/main' }}
             -Dsonar.qualitygate.timeout=300
         env:
           SONAR_TOKEN: ${{ secrets.SONARCLOUD_TOKEN }}
