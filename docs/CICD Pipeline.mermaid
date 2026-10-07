@@ -4,8 +4,8 @@ flowchart LR
         Code[Write Code]
         Commit[git commit]
         Push["git push
-(main / add-JWT-config: test + deploy ·
-fix-vulnerabilities, PRs to main: test + scan only)"]
+(main: test + deploy ·
+other branches, PRs to main: test + scan only)"]
     end
 
     subgraph "GitHub Actions: backend-tests + frontend-tests (parallel)"
@@ -85,7 +85,7 @@ checks HTTPS certificate + each service via the ALB"]
 
     Code --> Commit --> Push
     Push --> Tests --> SonarCI
-    SonarCI -->|"main / add-JWT-config"| Checkout
+    SonarCI -->|"main only"| Checkout
     Checkout --> AWSCreds --> ECRLogin
     ECRLogin --> B1 & B2 & B3 & B4
     B1 --> T1 --> ECR
