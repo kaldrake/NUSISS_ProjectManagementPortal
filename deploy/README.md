@@ -61,7 +61,8 @@ In AWS CloudShell (**ap-southeast-2**), upload the files in `aws/` and `hosts/lo
 6. **GitHub secrets**: `EC2_HOST` (web Elastic IP), `EC2_SSH_KEY` (`project-portal-key.pem`),
    `AWS_ACCESS_KEY_ID_JWT_BRANCH` / `AWS_SECRET_ACCESS_KEY_JWT_BRANCH` (IAM user with ECR push; step 5
    adds the SSM and instance-refresh permissions).
-7. **Push** to `add-JWT-config` → build, then the 3 groups roll, then web.
+7. **Push** to `main` (or merge a pull request into it) → tests, SonarCloud, build, then the 3 groups roll, then web.
+   Pushes to `add-JWT-config` deploy the same way while that branch is still in use.
 8. **SonarQube token** — `http://<web-ip>:9001` → My Account → Security → **User Token**; set `SONAR_TOKEN`
    in `/portal/scan/env`, then start an instance refresh of `project-portal-scan-asg` (or re-run a deploy).
 

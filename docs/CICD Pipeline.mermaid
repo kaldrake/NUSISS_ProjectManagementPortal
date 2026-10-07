@@ -4,20 +4,21 @@ flowchart LR
         Code[Write Code]
         Commit[git commit]
         Push["git push
-(add-JWT-config deploys ·
-main / feature-sonarCloud scan only)"]
+(main / add-JWT-config: test + deploy ·
+fix-vulnerabilities, PRs to main: test + scan only)"]
+    end
+
+    subgraph "GitHub Actions: backend-tests + frontend-tests (parallel)"
+        Tests["🧪 Unit tests
+mvn test × login / project / scan
++ Jest frontend tests"]
     end
 
     subgraph "GitHub Actions: sonarcloud-scan"
         SonarCI["📊 SonarCloud Scan
-mvn compile × 3 services
-+ frontend tests with coverage
-Single shared project · monorepo"]
-    end
-
-    subgraph "GitHub Actions: snyk-scan (disabled · scan limit)"
-        Snyk["🛡️ Snyk Dependency Scan
-Matrix: login / project / scan + frontend package.json"]
+tests with JaCoCo + frontend coverage
+Single shared project · monorepo
+Quality Gate enforced on main"]
     end
 
     subgraph "GitHub Actions: docker-build-push"
@@ -83,9 +84,8 @@ checks HTTPS certificate + each service via the ALB"]
     end
 
     Code --> Commit --> Push
-    Push --> SonarCI
-    Push -.-> Snyk
-    Push --> Checkout
+    Push --> Tests --> SonarCI
+    SonarCI -->|"main / add-JWT-config"| Checkout
     Checkout --> AWSCreds --> ECRLogin
     ECRLogin --> B1 & B2 & B3 & B4
     B1 --> T1 --> ECR
@@ -119,5 +119,5 @@ checks HTTPS certificate + each service via the ALB"]
     style R1 fill:#64748b,color:#fff
     style R2 fill:#64748b,color:#fff
     style R3 fill:#64748b,color:#fff
-    style Snyk fill:#f59e0b,color:#fff
+    style Tests fill:#16a34a,color:#fff
     style SonarCI fill:#0d9488,color:#fff
