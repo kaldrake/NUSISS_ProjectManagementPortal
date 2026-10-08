@@ -1,0 +1,102 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000'}}}%%
+classDiagram
+    direction TB
+
+    class JwtAuthenticationFilter {
+        <<OncePerRequestFilter>>
+        +doFilterInternal()
+        sets userId request attribute
+    }
+    class ScanController {
+        <<RestController /api>>
+        +analyzeRepository(request, userId)
+        +getScanStatus(scanId, userId)
+        +getScanVulnerabilities(scanId, userId)
+        +getScanHistory(repoId, userId)
+        +getProjectVulnerabilities(projectId, userId)
+        +getVulnerabilityById(id, userId)
+        +updateVulnerabilityStatus(id, status, userId)
+        +regenerateSuggestion(id, userId)
+        +getDashboardSummary(projectId, userId)
+        +getUserRepositories() / validateRepository()
+    }
+    class ScanService {
+        <<Service>>
+        +createScan(request, ownerId)
+        +runScan(scanId, request) async, transactional
+        +getVulnerabilitiesForProject(projectId, userId)
+        +getDashboardSummary(projectId, userId)
+        +getScanHistory(repoId, userId)
+        +updateVulnerabilityStatus(id, status, userId)
+        +regenerateSuggestion(id, userId)
+        -requireOwnedScan(scanId, userId)
+        -requireOwnedVulnerability(id, userId)
+        -attachAiSuggestion(vuln)
+        -finishScan(scan, status, error)
+        -saveScanSummary(scanId, issues)
+    }
+    class SonarQubeScannerService {
+        <<Service>>
+        +scanRepository(url, branch, key)
+        -createScanDirectory()
+        -cloneRepository()
+        -runSonarScanner()
+        -waitForAnalysis()
+        -latestTaskStatus()
+        -fetchIssues()
+        -cleanup()
+    }
+    class GitHubService {
+        <<Service>>
+        +getUserRepositories(token)
+        +validateRepositoryUrl(url, token)
+    }
+    class AiSuggestionRouter {
+        <<Service, facade>>
+        see AI Suggestion Class Diagram
+    }
+
+    class Scan {
+        <<Entity scans>>
+        projectId
+        repositoryId
+        ownerId
+        scanStatus
+        sonarqubeProjectKey
+        startedAt, completedAt
+        errorMessage
+    }
+    class Vulnerability {
+        <<Entity vulnerabilities>>
+        sonarqubeRuleId
+        vulnerabilityType
+        severity
+        filePath, lineNumber
+        message
+        status
+    }
+    class AiSuggestion {
+        <<Entity ai_suggestions>>
+        suggestionText
+        codeExample
+        confidenceScore
+        modelUsed
+    }
+    class ScanSummary {
+        <<Entity scan_summary>>
+        totalVulnerabilities
+        blocker, critical, major, minor, info counts
+    }
+
+    JwtAuthenticationFilter --> ScanController : valid JWT
+    ScanController --> ScanService
+    ScanController --> GitHubService
+    ScanService --> SonarQubeScannerService : clone, analyse, fetch issues
+    ScanService --> AiSuggestionRouter : BLOCKER / CRITICAL only
+    ScanService ..> Scan : JPA ScanRepository
+    ScanService ..> Vulnerability : JPA VulnerabilityRepository
+    ScanService ..> AiSuggestion : JPA AiSuggestionRepository
+    ScanService ..> ScanSummary : JPA ScanSummaryRepository
+    Scan "1" --> "0..*" Vulnerability : has
+    Vulnerability "1" --> "0..1" AiSuggestion : has
+    Scan "1" --> "0..1" ScanSummary : summarised by

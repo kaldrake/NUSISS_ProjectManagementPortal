@@ -1,0 +1,22 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff', 'fontSize': '18px'}}}%%
+flowchart LR
+    Push["💻 git push<br>or PR<br>to main"]
+    Dep["🛡️ dependency-scan<br>Snyk<br>fail fast"]
+    Tests["🧪 tests<br>backend ×3<br>frontend"]
+    Sonar["📊 sonarcloud-scan<br>coverage<br>quality gate"]
+    Build["🐳 docker-build-push<br>4 images to ECR<br>main only"]
+    DeployB["♻️ deploy-backends<br>SSM + ASG<br>instance refresh"]
+    DeployW["🌐 deploy-web<br>web EC2<br>health checks"]
+    Mon["📈 snyk-monitor<br>push only"]
+
+    Push --> Dep --> Tests --> Sonar --> Build --> DeployB --> DeployW
+    Dep -.-> Mon
+
+    style Push fill:#334155,color:#fff
+    style Dep fill:#f59e0b,color:#fff
+    style Tests fill:#8b5cf6,color:#fff
+    style Sonar fill:#0d9488,color:#fff
+    style Build fill:#8b5cf6,color:#fff
+    style DeployB fill:#0ea5e9,color:#fff
+    style DeployW fill:#10b981,color:#fff
+    style Mon fill:#64748b,color:#fff

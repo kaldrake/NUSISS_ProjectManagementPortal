@@ -1,0 +1,53 @@
+%%{init: {'sequence': {'wrap': true, 'width': 230, 'actorMargin': 40}, 'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
+sequenceDiagram
+    actor User
+    participant FE as React Frontend
+    participant LS as Login Service :8081
+    participant DB as login_db (MySQL)
+    participant PS as Project / Scan Service
+
+    rect rgb(230, 255, 230)
+        Note over User,DB: UC-01 Login
+        User->>FE: Enter username and password
+        FE->>LS: POST /api/auth/login
+        LS->>LS: AuthenticationManager: load user, BCrypt verify
+        alt invalid credentials
+            LS-->>FE: 401 Unauthorized
+            FE-->>User: Show error message
+        else valid credentials
+            LS->>LS: JwtUtil.generateToken (userId claim, unique jti, 24 h expiry)
+            LS->>DB: INSERT INTO sessions (user_id, jwt_token, expires_at)
+            LS-->>FE: 200 { token, user: {id, username, email, role} }
+            FE->>FE: Store token in localStorage
+            FE-->>User: Redirect to Dashboard
+        end
+    end
+
+    rect rgb(240, 240, 255)
+        Note over FE,PS: Subsequent requests
+        FE->>LS: GET /api/auth/me (Bearer token)
+        LS->>LS: Filter checks signature and expiry
+        LS->>DB: existsByJwtTokenAndExpiresAtAfter(token, now)
+        DB-->>LS: session row exists
+        LS-->>FE: 200 user profile
+        FE->>PS: GET /api/projects (Bearer token)
+        PS->>PS: Filter checks signature and expiry only
+        PS-->>FE: 200 caller's projects
+    end
+
+    rect rgb(255, 240, 245)
+        Note over User,DB: Logout
+        User->>FE: Click Log out
+        FE->>LS: POST /api/auth/logout (Bearer token)
+        LS->>DB: DELETE FROM sessions WHERE jwt_token = ?
+        LS-->>FE: 200 Logged out successfully
+        FE->>FE: Clear localStorage, redirect to /login
+        Note over LS,PS: The Login Service now rejects the token with 401. The Project and Scan Services still accept it until it expires.
+    end
+
+    rect rgb(255, 230, 230)
+        Note over FE,PS: Missing, invalid or expired token
+        FE->>PS: Request with expired JWT
+        PS-->>FE: 401 Unauthorized
+        FE->>FE: Clear localStorage, redirect to /login
+    end

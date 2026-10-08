@@ -1,0 +1,67 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000'}}}%%
+classDiagram
+    direction TB
+
+    class ScanService {
+        <<Service>>
+        -attachAiSuggestion(vuln)
+    }
+    class AiSuggestionRouter {
+        <<Service, facade>>
+        provider = ai.provider (AI_PROVIDER)
+        judgeEnabled = ai.judge.enabled
+        +generateFixSuggestion(vuln)
+        +getModelUsed(result)
+        -generateWithProvider(vuln)
+        -judgeWithProvider(vuln, suggestion)
+        -isReviewable(result)
+    }
+    class GeminiService {
+        <<Service, default provider>>
+        +generateFixSuggestion(vuln)
+        +judgeFixSuggestion(vuln, suggestion)
+        +getModel()
+        temperature 0.3 generate, 0.0 judge
+    }
+    class DeepSeekService {
+        <<Service>>
+        +generateFixSuggestion(vuln)
+        +judgeFixSuggestion(vuln, suggestion)
+        +getModel()
+    }
+    class ClaudeService {
+        <<Service>>
+        +generateFixSuggestion(vuln)
+        +judgeFixSuggestion(vuln, suggestion)
+        +getModel()
+    }
+    class FixSuggestionJudge {
+        <<package-private utility>>
+        +buildPrompt(vuln, suggestion)
+        +parseScore(reply)
+        +clamp(score)
+    }
+    class FallbackSuggestionTemplates {
+        <<utility>>
+        +forVulnerability(vuln)
+    }
+    class AiSuggestionResult {
+        suggestionText
+        codeExample
+        confidenceScore
+        usedFallback
+        +withConfidenceScore(score)
+    }
+
+    ScanService --> AiSuggestionRouter : generateFixSuggestion
+    AiSuggestionRouter --> GeminiService : AI_PROVIDER=gemini (default)
+    AiSuggestionRouter --> DeepSeekService : AI_PROVIDER=deepseek
+    AiSuggestionRouter --> ClaudeService : AI_PROVIDER=claude
+    GeminiService ..> FixSuggestionJudge : call 2 prompt and score
+    DeepSeekService ..> FixSuggestionJudge : call 2 prompt and score
+    ClaudeService ..> FixSuggestionJudge : call 2 prompt and score
+    GeminiService ..> FallbackSuggestionTemplates : no key or API error
+    DeepSeekService ..> FallbackSuggestionTemplates : no key or API error
+    ClaudeService ..> FallbackSuggestionTemplates : no key or API error
+    GeminiService ..> AiSuggestionResult : creates
+    AiSuggestionRouter ..> AiSuggestionResult : replaces confidence with reviewer score

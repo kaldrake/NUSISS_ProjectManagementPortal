@@ -1,4 +1,4 @@
-%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
+%%{init: {'sequence': {'wrap': true, 'width': 230, 'actorMargin': 40}, 'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
 sequenceDiagram
     actor User
     participant FE as React Frontend
@@ -11,12 +11,12 @@ sequenceDiagram
         Note over User,DB: Registration Flow
         User->>FE: Fill register form (username, email, password)
         FE->>LS: POST /api/auth/register
-        LS->>DB: Check email/username uniqueness
-        DB-->>LS: OK (unique)
+        LS->>DB: existsByUsername / existsByEmail
+        DB-->>LS: not taken
         LS->>LS: BCrypt hash password
         LS->>DB: INSERT INTO users (role = DEVELOPER)
-        DB-->>LS: User saved
-        LS->>LS: Generate JWT token (userId, username, role)
+        LS->>LS: Generate JWT (userId claim, unique jti, 24 h expiry)
+        LS->>DB: INSERT INTO sessions (user_id, jwt_token, expires_at)
         LS-->>FE: 201 { token, user: {id, username, email, role} }
         FE->>FE: Store token in localStorage
         FE-->>User: Redirect to Dashboard
@@ -30,20 +30,30 @@ sequenceDiagram
         LS->>DB: SELECT user WHERE username = ?
         DB-->>LS: User record
         LS->>LS: BCrypt verify password
-        LS->>LS: Generate JWT token (stateless, no session row)
+        LS->>LS: Generate JWT (userId claim, unique jti, 24 h expiry)
+        LS->>DB: INSERT INTO sessions (user_id, jwt_token, expires_at)
         LS-->>FE: 200 { token, user: {id, username, email, role} }
         FE->>FE: Store token in localStorage
         FE-->>User: Redirect to Dashboard
     end
 
-    %% Authenticated Request
+    %% Authenticated request to the Login Service
+    rect rgb(240, 240, 255)
+        Note over User,DB: Authenticated call to the Login Service (e.g. GET /api/auth/me)
+        FE->>LS: Authorization: Bearer token
+        LS->>LS: JwtAuthenticationFilter validates signature and expiry
+        LS->>DB: existsByJwtTokenAndExpiresAtAfter(token, now)
+        DB-->>LS: session row exists
+        LS-->>FE: 200 { id, username, email, role }
+    end
+
+    %% Authenticated request to the Project Service
     rect rgb(255, 245, 230)
-        Note over User,PS: Authenticated API Call (Project / Scan Service)
+        Note over User,PS: Authenticated call to the Project or Scan Service
         User->>FE: Navigate to Projects
         FE->>FE: Read JWT from localStorage
-        FE->>+PS: GET /api/projects (Authorization: Bearer <token>)
-        Note right of PS: JwtAuthenticationFilter intercepts
-        PS->>PS: Validate JWT signature & expiry (shared secret)
+        FE->>+PS: GET /api/projects (Authorization: Bearer token)
+        PS->>PS: JwtAuthenticationFilter validates signature and expiry only (shared secret)
         PS->>PS: Set SecurityContext (ROLE_USER) and userId request attribute
         PS-->>-FE: 200 { projects[] } (caller's own projects only)
         FE-->>User: Render Projects page
@@ -54,7 +64,18 @@ sequenceDiagram
         Note over User,PS: Access to another user's project
         FE->>PS: GET /api/projects/{id} (valid JWT, different owner)
         PS->>PS: requireOwnedProject: project.ownerId != JWT userId
-        PS-->>FE: 403 Forbidden
+        PS-->>FE: Access denied (ownership rule, ResponseStatusException 403)
+    end
+
+    %% Logout
+    rect rgb(255, 240, 245)
+        Note over User,DB: Logout
+        User->>FE: Click Log out
+        FE->>LS: POST /api/auth/logout (Bearer token)
+        LS->>DB: DELETE FROM sessions WHERE jwt_token = ?
+        LS-->>FE: 200 Logged out successfully
+        FE->>FE: Clear localStorage, redirect to /login
+        Note over LS,PS: The Login Service now rejects the token (no session row). The Project and Scan Services check only signature and expiry, so they accept it until it expires.
     end
 
     %% Token Expiry

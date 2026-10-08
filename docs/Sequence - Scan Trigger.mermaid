@@ -1,0 +1,35 @@
+%%{init: {'sequence': {'wrap': true, 'width': 230, 'actorMargin': 40}, 'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
+sequenceDiagram
+    actor User
+    participant FE as Frontend (RepositoryList)
+    participant PS as Project Service :8082
+    participant SS as Scan Service :8083
+    participant DB as scan_db (MySQL)
+
+    User->>FE: Click "Scan Now"
+    FE->>PS: POST /api/projects/{pid}/repositories/{rid}/scan (Bearer JWT)
+
+    alt token missing, invalid or expired
+        PS-->>FE: 401 Unauthorized (HttpStatusEntryPoint)
+        FE->>FE: 401 interceptor clears session, redirect to /login
+    else token valid
+        PS->>PS: assertProjectOwner(pid, userId from JWT)
+        alt caller does not own the project
+            PS-->>FE: Access denied (ownership rule)
+        else caller owns the project
+            PS-->>FE: 202 Accepted (returns immediately)
+            FE-->>User: Toast "Scan triggered successfully"
+        end
+    end
+
+    rect rgb(255, 245, 230)
+        Note over PS,SS: Background thread 1 (project-service, @Async) - JWT passed explicitly
+        PS->>PS: load repository (cloneUrl, defaultBranch)
+        PS->>SS: POST /api/scans/analyze (Bearer JWT, ScanRequestDTO)
+        SS->>SS: JwtAuthenticationFilter sets userId attribute
+        SS->>DB: INSERT scans (status PENDING, owner_id = userId)
+        SS-->>PS: 202 ACCEPTED (with scanId)
+        PS->>PS: update repository lastScanAt
+    end
+
+    Note over SS,DB: SS then starts runScan on its own background thread (see Scan Execution Sequence)

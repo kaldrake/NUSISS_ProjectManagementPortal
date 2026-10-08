@@ -33,13 +33,13 @@ health check: /health"]
         subgraph "Auto Scaling Groups · 1–3 instances each · target 60% avg CPU"
             LS["🔐 Login Service
 project-portal-login-asg · t3.small
-Spring Boot 3.5 (Java 17) :8081"]
+Spring Boot 4.1 (Java 17) :8081"]
             PS["📁 Project Service
 project-portal-project-asg · t3.small
-Spring Boot 3.5 (Java 17) :8082"]
+Spring Boot 4.1 (Java 17) :8082"]
             SCS["🔍 Scan Service
 project-portal-scan-asg · t3.medium
-Spring Boot 3.5 + sonar-scanner :8083"]
+Spring Boot 4.1 + sonar-scanner :8083"]
         end
 
         SSM["🗝️ SSM Parameter Store
@@ -52,7 +52,7 @@ users · sessions")]
             PDB[("🗄️ project_db
 projects · repositories")]
             SDB[("🗄️ scan_db
-scans · vulnerabilities · ai_suggestions")]
+scans · vulnerabilities · ai_suggestions · scan_summary")]
         end
 
         ECR["📦 Amazon ECR
@@ -64,7 +64,8 @@ nusiss_projectmanagementportal
         GH["🐙 GitHub
 Repository Hosting"]
         AI["🤖 AI Suggestion Router (AI_PROVIDER)
-DeepSeek (active) · Gemini / Claude (configurable)"]
+Gemini · DeepSeek (in use) · Claude (supported)
+second reviewer call scores each fix"]
     end
 
     %% User to the web EC2
@@ -92,7 +93,7 @@ DeepSeek (active) · Gemini / Claude (configurable)"]
 
     %% External integrations
     SCS -->|"Git Clone (source code)"| GH
-    SCS -->|"REST API (AI suggestions)"| AI
+    SCS -->|"REST API (AI suggestions + review)"| AI
 
     %% Instance bootstrap: config + images
     SSM -.->|"config at boot (start.sh)"| LS

@@ -1,0 +1,43 @@
+%%{init: {'sequence': {'wrap': true, 'width': 230, 'actorMargin': 40}, 'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000'}}}%%
+sequenceDiagram
+    actor User
+    participant PD as ProjectDetailPage (React)
+    participant VL as VulnerabilityList (React)
+    participant PS as Project Service :8082
+    participant SS as Scan Service :8083
+    participant DB as scan_db (MySQL)
+
+    User->>PD: Open a project
+    Note over PD: fetchProjectData sends three requests in parallel (Promise.all), each with the Bearer JWT
+
+    par project details
+        PD->>PS: GET /api/projects/{id}
+        PS->>PS: JwtAuthenticationFilter, requireOwnedProject (ownership rule)
+        PS->>SS: GET /api/scans/projects/{id}/vulnerabilities (forward JWT)
+        SS->>DB: findLatestByProjectId(id, ownerId): latest COMPLETED scan per repository
+        DB-->>SS: rows
+        SS-->>PS: List of VulnerabilityDTO
+        PS-->>PD: ProjectResponseDTO (vulnerabilityCount, criticalCount)
+    and repositories
+        PD->>PS: GET /api/projects/{id}/repositories
+        PS-->>PD: repository list
+    and vulnerabilities
+        PD->>SS: GET /api/scans/projects/{id}/vulnerabilities
+        SS->>DB: findLatestByProjectId(id, ownerId)
+        DB-->>SS: vulnerabilities with ai_suggestions
+        SS-->>PD: List of VulnerabilityDTO (with AiSuggestionDTO)
+    end
+
+    PD-->>User: Render tabs, repositories and vulnerability list
+    PD->>VL: pass vulnerabilities
+    VL-->>User: Severity badges, confidence percentage, AI suggestion text
+
+    opt User changes a vulnerability status
+        User->>VL: choose new status
+        VL->>SS: PATCH /api/scans/vulnerabilities/{id}/status?status=
+        SS->>DB: UPDATE vulnerabilities SET status (owner check first)
+    end
+
+    alt token expired or invalid on any call
+        SS-->>PD: 401 - response interceptor clears session and redirects to /login
+    end

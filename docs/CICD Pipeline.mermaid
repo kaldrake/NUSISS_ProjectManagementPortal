@@ -1,123 +1,58 @@
 %%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
-flowchart LR
-    subgraph "Developer"
-        Code[Write Code]
-        Commit[git commit]
-        Push["git push
-(add-JWT-config deploys ·
-main / feature-sonarCloud scan only)"]
+flowchart TB
+    Push["💻 Developer<br>git push to main · pull request to main"]
+
+    subgraph G1["Stage 1 · dependency-scan"]
+        Snyk["🛡️ Snyk Open Source (fail fast)<br>login · project · scan pom.xml + frontend package-lock.json<br>--severity-threshold=high --fail-on=upgradable"]
     end
 
-    subgraph "GitHub Actions: sonarcloud-scan"
-        SonarCI["📊 SonarCloud Scan
-mvn compile × 3 services
-+ frontend tests with coverage
-Single shared project · monorepo"]
+    subgraph G2["Stage 2 · tests"]
+        BT["🧪 backend-tests (needs stage 1)<br>matrix × 3: mvn test<br>login · project · scan"]
+        FT["🧪 frontend-tests<br>Jest (npm test)"]
+        MON["📈 snyk-monitor<br>push only · non-gating<br>snapshot to Snyk dashboard"]
     end
 
-    subgraph "GitHub Actions: snyk-scan (disabled · scan limit)"
-        Snyk["🛡️ Snyk Dependency Scan
-Matrix: login / project / scan + frontend package.json"]
+    subgraph G3["Stage 3 · sonarcloud-scan"]
+        Sonar["📊 SonarCloud (needs both test jobs)<br>mvn test + JaCoCo, Jest coverage<br>one shared project · wait for quality gate"]
     end
 
-    subgraph "GitHub Actions: docker-build-push"
-
-        Checkout[Checkout Code<br>actions/checkout@v4]
-
-        subgraph "AWS Auth"
-            AWSCreds[Configure AWS Credentials<br>Access Key + Secret Key]
-            ECRLogin[Login to Amazon ECR<br>amazon-ecr-login@v2]
-        end
-
-        subgraph "Docker Build × 4"
-            B1["Build login-service
-project-portal-backend/springBoot_login"]
-            B2["Build project-service
-project-portal-backend/springBoot_project"]
-            B3["Build scan-service
-project-portal-backend/springBoot_scan"]
-            B4["Build frontend
-project-portal-frontend (Nginx, /api proxy)"]
-        end
-
-        subgraph "Push to ECR (2 tags each)"
-            T1["login-latest
-login-{sha}"]
-            T2["project-latest
-project-{sha}"]
-            T3["scan-latest
-scan-{sha}"]
-            T4["frontend-latest
-frontend-{sha}"]
-        end
+    subgraph G4["Stage 4 · build + push"]
+        Build["🐳 docker-build-push (main only)<br>Build 4 images<br>login · project · scan · frontend (Nginx)"]
+        ECR[("📦 Amazon ECR · ap-southeast-2<br>nusiss_projectmanagementportal<br>service-latest + service-sha")]
     end
 
-    subgraph "AWS ECR (ap-southeast-2)"
-        ECR[("📦 nusiss_projectmanagementportal")]
+    subgraph G5["Stage 5 · deploy-backends (× 3)"]
+        SSM["🗝️ One job per Auto Scaling group<br>Publish to SSM Parameter Store<br>/portal/role/compose · /portal/image-tag = sha"]
+        Refresh["♻️ Instance refresh<br>login-asg · project-asg · scan-asg<br>min healthy 100% · max 200% · warm-up 120 s"]
+        Health["✅ New instance boots, reads SSM, pulls image<br>internal ALB /health passes, old instance terminated"]
     end
 
-    subgraph "GitHub Actions: deploy-backends (parallel · one job per Auto Scaling Group)"
-        SSMPUB["Publish to SSM Parameter Store
-/portal/&lt;role&gt;/compose
-/portal/image-tag = {sha}"]
-        D1["project-portal-login-asg
-instance refresh"]
-        D2["project-portal-project-asg
-instance refresh"]
-        D3["project-portal-scan-asg
-instance refresh"]
+    subgraph G6["Stage 6 · deploy-web"]
+        Web["🌐 web EC2 over SSH (needs all three groups)<br>deploy.sh sha · Caddy + frontend<br>checks frontend, HTTPS certificate, each backend via the ALB"]
     end
 
-    subgraph "Instance refresh (per group, zero downtime)"
-        R1["Launch new instance
-boot: read SSM config, pull {sha}"]
-        R2["ALB /health passes
-+ 120 s warm-up"]
-        R3["Terminate old instance"]
-    end
+    Push --> Snyk
+    Snyk --> BT
+    Snyk --> FT
+    Snyk -.-> MON
+    BT --> Sonar
+    FT --> Sonar
+    Sonar --> Build
+    Build --> ECR
+    ECR --> SSM
+    SSM --> Refresh
+    Refresh --> Health
+    Health --> Web
 
-    subgraph "GitHub Actions: deploy-web (only if all groups refreshed)"
-        DW["web EC2 (SSH)
-deploy.sh {sha} · Caddy + frontend
-checks HTTPS certificate + each service via the ALB"]
-    end
-
-    Code --> Commit --> Push
-    Push --> SonarCI
-    Push -.-> Snyk
-    Push --> Checkout
-    Checkout --> AWSCreds --> ECRLogin
-    ECRLogin --> B1 & B2 & B3 & B4
-    B1 --> T1 --> ECR
-    B2 --> T2 --> ECR
-    B3 --> T3 --> ECR
-    B4 --> T4 --> ECR
-    ECR --> SSMPUB
-    SSMPUB --> D1 & D2 & D3
-    D1 & D2 & D3 -.-> R1
-    R1 --> R2 --> R3
-    D1 & D2 & D3 --> DW
-
-    %% Styling
-    style Checkout fill:#f97316,color:#fff
-    style AWSCreds fill:#FF9800,color:#fff
-    style ECRLogin fill:#FF9800,color:#fff
-    style B1 fill:#8b5cf6,color:#fff
-    style B2 fill:#8b5cf6,color:#fff
-    style B3 fill:#8b5cf6,color:#fff
-    style B4 fill:#8b5cf6,color:#fff
-    style T1 fill:#3b82f6,color:#fff
-    style T2 fill:#3b82f6,color:#fff
-    style T3 fill:#3b82f6,color:#fff
-    style T4 fill:#3b82f6,color:#fff
-    style ECR fill:#FF9800,color:#fff
-    style D1 fill:#0ea5e9,color:#fff
-    style D2 fill:#0ea5e9,color:#fff
-    style D3 fill:#0ea5e9,color:#fff
-    style DW fill:#10b981,color:#fff
-    style SSMPUB fill:#5c6bc0,color:#fff
-    style R1 fill:#64748b,color:#fff
-    style R2 fill:#64748b,color:#fff
-    style R3 fill:#64748b,color:#fff
+    style Push fill:#334155,color:#fff
     style Snyk fill:#f59e0b,color:#fff
-    style SonarCI fill:#0d9488,color:#fff
+    style BT fill:#8b5cf6,color:#fff
+    style FT fill:#8b5cf6,color:#fff
+    style MON fill:#64748b,color:#fff
+    style Sonar fill:#0d9488,color:#fff
+    style Build fill:#8b5cf6,color:#fff
+    style ECR fill:#FF9800,color:#fff
+    style SSM fill:#5c6bc0,color:#fff
+    style Refresh fill:#0ea5e9,color:#fff
+    style Health fill:#0ea5e9,color:#fff
+    style Web fill:#10b981,color:#fff
