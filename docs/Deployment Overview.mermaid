@@ -1,0 +1,44 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff', 'fontSize': '18px'}}}%%
+flowchart LR
+    User["👤 User"]
+
+    subgraph WEB["web EC2 (single host)"]
+        Caddy["🔒 Caddy<br>HTTPS :443"]
+        Nginx["🌐 Nginx<br>frontend + /api proxy"]
+        SQ["📊 SonarQube<br>:9001"]
+    end
+
+    ALB["⚖️ Internal ALB<br>:8081 :8082 :8083<br>/health"]
+
+    subgraph ASG["Auto Scaling groups"]
+        L["🔐 Login<br>:8081<br>1 to 3"]
+        P["📁 Project<br>:8082<br>1 to 3"]
+        S["🔍 Scan<br>:8083<br>1 to 3"]
+    end
+
+    RDS[("🗄️ RDS MySQL 8.4<br>login_db<br>project_db<br>scan_db")]
+    GH["🐙 GitHub"]
+    LLM["🤖 Gemini or<br>DeepSeek"]
+
+    User --> Caddy --> Nginx --> ALB
+    ALB --> L
+    ALB --> P
+    ALB --> S
+    L --> RDS
+    P --> RDS
+    S --> RDS
+    S --> SQ
+    S --> GH
+    S --> LLM
+
+    style User fill:#334155,color:#fff
+    style Caddy fill:#22863a,color:#fff
+    style Nginx fill:#4CAF50,color:#fff
+    style SQ fill:#9C27B0,color:#fff
+    style ALB fill:#e65100,color:#fff
+    style L fill:#2196F3,color:#fff
+    style P fill:#2196F3,color:#fff
+    style S fill:#2196F3,color:#fff
+    style RDS fill:#FF9800,color:#fff
+    style GH fill:#24292e,color:#fff
+    style LLM fill:#333,color:#fff

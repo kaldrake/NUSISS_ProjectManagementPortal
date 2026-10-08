@@ -1,0 +1,86 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000'}}}%%
+classDiagram
+    direction TB
+
+    class SecurityConfig {
+        <<Configuration>>
+        public: /api/auth/login, /api/auth/register, /health
+        all other requests authenticated
+        HttpStatusEntryPoint 401
+    }
+    class JwtAuthenticationFilter {
+        <<OncePerRequestFilter>>
+        +doFilterInternal()
+        1 validate signature and expiry
+        2 session row must exist
+    }
+    class AuthController {
+        <<RestController /api/auth>>
+        +login(request)
+        +register(request)
+        +logout(authorization)
+        +getCurrentUser(authorization)
+        -saveSession(userId, token)
+    }
+    class JwtUtil {
+        <<Component>>
+        +generateToken(userDetails, userId)
+        +extractUsername(token)
+        +extractUserId(token)
+        +isTokenValid(token, userDetails)
+        +getExpirationMs()
+    }
+    class UserDetailsServiceImpl {
+        <<Service>>
+        +loadUserByUsername(username)
+        authority = ROLE_ + user.role
+    }
+    class UserRepository {
+        <<JpaRepository>>
+        +findByUsername()
+        +findByEmail()
+        +existsByUsername()
+        +existsByEmail()
+    }
+    class SessionRepository {
+        <<JpaRepository>>
+        +findByJwtToken()
+        +existsByJwtTokenAndExpiresAtAfter(token, now)
+        +deleteByJwtToken(token)
+        +deleteByUserId(userId)
+        +deleteExpiredSessions(now)
+    }
+    class User {
+        <<Entity users>>
+        username
+        email
+        passwordHash
+        role = DEVELOPER
+        githubId, githubAccessToken
+        createdAt, updatedAt
+    }
+    class Session {
+        <<Entity sessions>>
+        userId
+        jwtToken
+        expiresAt
+        createdAt
+    }
+    class AuthenticationManager {
+        <<Spring Security>>
+        BCrypt password check
+    }
+
+    SecurityConfig --> JwtAuthenticationFilter : registers
+    JwtAuthenticationFilter --> JwtUtil
+    JwtAuthenticationFilter --> UserDetailsServiceImpl
+    JwtAuthenticationFilter --> SessionRepository : revocation check
+    AuthController --> AuthenticationManager
+    AuthController --> JwtUtil : generateToken
+    AuthController --> UserRepository
+    AuthController --> SessionRepository : save and delete
+    AuthController --> UserDetailsServiceImpl
+    UserDetailsServiceImpl --> UserRepository
+    UserRepository ..> User
+    SessionRepository ..> Session
+    User "1" --> "0..*" Session : has

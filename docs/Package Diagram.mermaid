@@ -1,0 +1,72 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000', 'edgeLabelBackground': '#ffffff'}}}%%
+flowchart TB
+    subgraph FE["Frontend (React)"]
+        direction TB
+        FEC["components<br>Common · Dashboard · Login · Projects"]
+        FEH["hooks<br>useAuth"]
+        FES["services<br>api (Axios clients + interceptors) · auth · project · scan · github"]
+        FET["types"]
+        FEC --> FEH
+        FEC --> FES
+        FEH --> FES
+        FES --> FET
+    end
+
+    subgraph LOGIN["Login Service"]
+        direction TB
+        LC["controller<br>AuthController · HealthController"]
+        LS["security<br>JwtUtil · JwtAuthenticationFilter · UserDetailsServiceImpl"]
+        LR["repository<br>UserRepository · SessionRepository"]
+        LE["entity<br>User · Session"]
+        LD["dto/auth<br>LoginRequestDTO · RegisterRequestDTO"]
+        LCF["config<br>SecurityConfig · CorsConfig"]
+        LC --> LS
+        LC --> LR
+        LC --> LD
+        LS --> LR
+        LR --> LE
+        LCF --> LS
+    end
+
+    subgraph PROJECT["Project Service"]
+        direction TB
+        PC["controller<br>ProjectController · HealthController"]
+        PSV["service<br>ProjectService"]
+        PCL["client<br>ScanServiceClient<br>(REST to Scan Service, forwards the JWT)"]
+        PSE["security<br>JwtUtil · JwtAuthenticationFilter"]
+        PR["repository<br>ProjectRepository · GitHubRepositoryRepository"]
+        PE["entity<br>Project · GitHubRepository"]
+        PD["dto"]
+        PCF["config<br>SecurityConfig · CorsConfig · RestTemplateConfig"]
+        PC --> PSV
+        PC --> PD
+        PSV --> PR
+        PSV --> PCL
+        PR --> PE
+        PCF --> PSE
+    end
+
+    subgraph SCAN["Scan Service"]
+        direction TB
+        SC["controller<br>ScanController · HealthController"]
+        SSV["service<br>ScanService · SonarQubeScannerService · GitHubService<br>AiSuggestionRouter · Gemini / DeepSeek / Claude Service<br>FixSuggestionJudge · FallbackSuggestionTemplates"]
+        SSE["security<br>JwtUtil · JwtAuthenticationFilter"]
+        SR["repository<br>Scan · Vulnerability · AiSuggestion · ScanSummary repositories"]
+        SE["entity<br>Scan · Vulnerability · AiSuggestion · ScanSummary"]
+        SD["dto"]
+        SCF["config<br>SecurityConfig · CorsConfig · AppConfig"]
+        SC --> SSV
+        SC --> SD
+        SSV --> SR
+        SR --> SE
+        SCF --> SSE
+    end
+
+    FES -->|"REST + Bearer JWT"| LC
+    FES -->|"REST + Bearer JWT"| PC
+    FES -->|"REST + Bearer JWT"| SC
+
+    style FE fill:#1b5e20,color:#fff
+    style LOGIN fill:#0d47a1,color:#fff
+    style PROJECT fill:#1565c0,color:#fff
+    style SCAN fill:#1976d2,color:#fff

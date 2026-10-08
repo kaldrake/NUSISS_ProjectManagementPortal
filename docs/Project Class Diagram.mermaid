@@ -1,0 +1,95 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'lineColor': '#000000'}}}%%
+classDiagram
+    direction TB
+
+    class JwtAuthenticationFilter {
+        <<OncePerRequestFilter>>
+        +doFilterInternal()
+        validates signature and expiry only
+        sets userId request attribute
+    }
+    class JwtUtil {
+        <<Component>>
+        +extractUsername(token)
+        +extractUserId(token)
+        +isTokenValid(token, userDetails)
+    }
+    class ProjectController {
+        <<RestController /api/projects>>
+        +getMyProjects(userId)
+        +getProjectById(id, userId)
+        +createProject(dto, userId)
+        +updateProject(id, dto, userId)
+        +deleteProject(id, userId)
+        +getProjectRepositories(id, userId)
+        +addRepository(id, dto, userId)
+        +removeRepository(id, repoId, userId)
+        +triggerScan(id, repoId, userId, authorization)
+        +getDashboardSummary(id, userId)
+    }
+    class ProjectService {
+        <<Service>>
+        +getProjectsByOwner(ownerId)
+        +getProjectById(id, userId)
+        +createProject(dto, ownerId)
+        +updateProject(id, dto, ownerId)
+        +deleteProject(id, ownerId)
+        +addRepository(id, dto, userId)
+        +removeRepository(repoId, id, userId)
+        +assertProjectOwner(id, userId)
+        +triggerScan(id, repoId, jwt) async
+        +getProjectDashboardSummary(id, userId)
+        -requireOwnedProject(id, userId)
+    }
+    class ScanServiceClient {
+        <<Component, RestTemplate>>
+        +triggerScan(projectId, repoId, cloneUrl, branch, jwt)
+        +getVulnerabilitiesByProjectId(projectId)
+        +getDashboardSummary(projectId)
+        +getScanHistory(repoId)
+        +getScanStatus(scanId)
+    }
+    class ProjectRepository {
+        <<JpaRepository>>
+        +findByOwnerId(ownerId)
+        +existsByNameAndOwnerId(name, ownerId)
+    }
+    class GitHubRepositoryRepository {
+        <<JpaRepository>>
+        +findByProjectId(projectId)
+        +existsByProjectIdAndGithubRepoId()
+        +deleteByProjectId(projectId)
+    }
+    class Project {
+        <<Entity projects>>
+        name
+        description
+        ownerId
+        createdAt, updatedAt
+    }
+    class GitHubRepository {
+        <<Entity repositories>>
+        projectId
+        githubRepoId
+        repoName, repoFullName
+        repoUrl, cloneUrl
+        defaultBranch
+        isActive
+        lastScanAt
+    }
+    class ScanService {
+        <<Scan Service :8083>>
+        POST /api/scans/analyze
+        GET /api/scans/projects/id/vulnerabilities
+    }
+
+    JwtAuthenticationFilter --> JwtUtil
+    JwtAuthenticationFilter --> ProjectController : valid JWT
+    ProjectController --> ProjectService
+    ProjectService --> ProjectRepository
+    ProjectService --> GitHubRepositoryRepository
+    ProjectService --> ScanServiceClient
+    ScanServiceClient ..> ScanService : HTTP + Bearer JWT
+    ProjectRepository ..> Project
+    GitHubRepositoryRepository ..> GitHubRepository
+    Project "1" --> "0..*" GitHubRepository : contains
