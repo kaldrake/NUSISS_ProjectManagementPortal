@@ -19,6 +19,11 @@ public class AiSuggestionResult {
 		this.usedFallback = usedFallback;
 	}
 
+	/** Same suggestion with a different confidence score (used to apply the reviewer call's score). */
+	public AiSuggestionResult withConfidenceScore(double newConfidenceScore) {
+		return new AiSuggestionResult(suggestionText, codeExample, newConfidenceScore, usedFallback);
+	}
+
 	public String getSuggestionText() {
 		return suggestionText;
 	}

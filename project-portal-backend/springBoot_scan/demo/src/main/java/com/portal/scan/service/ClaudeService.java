@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.OptionalDouble;
+
 @Service
 public class ClaudeService {
 
@@ -48,6 +50,44 @@ public class ClaudeService {
 			@JsonPropertyDescription("3-4 step-by-step fix instructions") String steps,
 			@JsonPropertyDescription("A code snippet showing the fix") String codeExample,
 			@JsonPropertyDescription("How confident you are this fix is correct for this exact code, 0.0 to 1.0") double confidence) {
+	}
+
+	// Structured output for the reviewer call of the double-call scoring.
+	private record JudgeVerdict(
+			@JsonPropertyDescription("0.0 (wrong or unsafe) to 1.0 (correct and complete)") double score,
+			@JsonPropertyDescription("1 sentence justifying the score") String reason) {
+	}
+
+	/**
+	 * Second call of the double-call scoring: an independent review of an already generated suggestion.
+	 * Empty when no key is set or the call fails, so the caller keeps the self-reported confidence.
+	 */
+	public OptionalDouble judgeFixSuggestion(Vulnerability vulnerability, AiSuggestionResult suggestion) {
+		if (client == null) {
+			return OptionalDouble.empty();
+		}
+		try {
+			StructuredMessageCreateParams<JudgeVerdict> params = MessageCreateParams.builder()
+					.model(model)
+					.maxTokens(300L)
+					.thinking(ThinkingConfigDisabled.builder().build())
+					.outputConfig(JudgeVerdict.class)
+					.addUserMessage(FixSuggestionJudge.buildPrompt(vulnerability, suggestion))
+					.build();
+
+			JudgeVerdict[] holder = new JudgeVerdict[1];
+			client.messages().create(params).content().stream()
+					.flatMap(cb -> cb.text().stream())
+					.findFirst()
+					.ifPresent(typed -> holder[0] = typed.text());
+			if (holder[0] == null) {
+				return OptionalDouble.empty();
+			}
+			return OptionalDouble.of(FixSuggestionJudge.clamp(holder[0].score()));
+		} catch (Exception e) {
+			log.warn("Claude judge call failed: {}", e.getMessage());
+			return OptionalDouble.empty();
+		}
 	}
 
 	public AiSuggestionResult generateFixSuggestion(Vulnerability vulnerability) {

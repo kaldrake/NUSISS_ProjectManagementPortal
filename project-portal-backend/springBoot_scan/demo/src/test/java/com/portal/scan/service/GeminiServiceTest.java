@@ -315,4 +315,41 @@ class GeminiServiceTest {
 
         assertFalse(result.isUsedFallback());
     }
+
+    // ---------------------------------------------------------------- double-call reviewer
+
+    private AiSuggestionResult generated() {
+        return new AiSuggestionResult("Use a prepared statement", "ps.setString(1, name);", 0.9, false);
+    }
+
+    @Test
+    void judge_returnsReviewerScore() throws Exception {
+        respondWith(geminiBody("{\"score\": 0.35, \"reason\": \"does not parameterise the query\"}", "STOP"));
+
+        assertEquals(java.util.OptionalDouble.of(0.35),
+                service.judgeFixSuggestion(vulnerability("sql", "CRITICAL"), generated()));
+    }
+
+    @Test
+    void judge_withoutApiKey_isEmptyAndMakesNoCall() {
+        ReflectionTestUtils.setField(service, "apiKey", "");
+
+        assertTrue(service.judgeFixSuggestion(vulnerability("sql", "CRITICAL"), generated()).isEmpty());
+        verifyNoInteractions(restTemplate);
+    }
+
+    @Test
+    void judge_withUnusableReply_isEmpty() throws Exception {
+        respondWith(geminiBody("I think it is fine", "STOP"));
+
+        assertTrue(service.judgeFixSuggestion(vulnerability("sql", "CRITICAL"), generated()).isEmpty());
+    }
+
+    @Test
+    void judge_whenCallFails_isEmpty() {
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new RuntimeException("503 high demand"));
+
+        assertTrue(service.judgeFixSuggestion(vulnerability("sql", "CRITICAL"), generated()).isEmpty());
+    }
 }

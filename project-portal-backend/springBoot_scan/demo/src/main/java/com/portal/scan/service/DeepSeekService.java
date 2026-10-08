@@ -10,6 +10,8 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.OptionalDouble;
+
 @Service
 public class DeepSeekService {
 
@@ -90,6 +92,35 @@ public class DeepSeekService {
 		} catch (Exception e) {
 			log.error("DeepSeek API call failed: {}", e.getMessage());
 			return new AiSuggestionResult(FallbackSuggestionTemplates.forVulnerability(vulnerability), "", FALLBACK_CONFIDENCE, true);
+		}
+	}
+
+	/**
+	 * Second call of the double-call scoring: an independent review of an already generated suggestion.
+	 * Empty when no key is set or the reply is unusable, so the caller keeps the self-reported confidence.
+	 */
+	public OptionalDouble judgeFixSuggestion(Vulnerability vulnerability, AiSuggestionResult suggestion) {
+		if (apiKey == null || apiKey.isEmpty()) {
+			return OptionalDouble.empty();
+		}
+		try {
+			HttpHeaders headers = new HttpHeaders();
+			headers.setContentType(MediaType.APPLICATION_JSON);
+			headers.setBearerAuth(apiKey);
+
+			String requestBody = String.format(
+					"{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],"
+							+ "\"temperature\":0,\"max_tokens\":300,"
+							+ "\"response_format\":{\"type\":\"json_object\"}}",
+					model, escapeJson(FixSuggestionJudge.buildPrompt(vulnerability, suggestion)));
+
+			ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST,
+					new HttpEntity<>(requestBody, headers), String.class);
+			String reply = objectMapper.readTree(response.getBody()).path("choices").get(0).path("message").path("content").asText();
+			return FixSuggestionJudge.parseScore(reply);
+		} catch (Exception e) {
+			log.warn("DeepSeek judge call failed: {}", e.getMessage());
+			return OptionalDouble.empty();
 		}
 	}
 

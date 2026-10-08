@@ -51,6 +51,7 @@ Create a `.env` file in the repository root (it is git-ignored). Docker Compose 
 | `LOGIN_SERVICE_URL`, `SCAN_SERVICE_URL` | Inter-service URLs (default to the compose service names) |
 | `SONAR_TOKEN` | SonarQube **User Token** (see step 4) |
 | `AI_PROVIDER` | `gemini` (default), `deepseek` or `claude` |
+| `AI_JUDGE_ENABLED` | `true` (default): a second AI call independently scores each BLOCKER/CRITICAL fix suggestion. `false`: single call, confidence is the model self-report. Doubles AI requests per finding. |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini key and model. The free tier is per Google Cloud project; check AI Studio for models with a free quota. |
 | `DEEPSEEK_API_KEY`, `CLAUDE_API_KEY`, `CLAUDE_MODEL` | Only needed if you switch `AI_PROVIDER` |
 

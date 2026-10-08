@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.OptionalDouble;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,6 +38,9 @@ public class GeminiService {
 	// Confidence for text salvaged from JSON that was cut off or wasn't JSON at all.
 	private static final double SALVAGED_CONFIDENCE = 0.35;
 	private static final int LOG_PREVIEW_LENGTH = 500;
+	// The reviewer call should be as repeatable as possible, unlike the generator call.
+	private static final double JUDGE_TEMPERATURE = 0.0;
+	private static final double GENERATOR_TEMPERATURE = 0.3;
 
 	private static final Pattern EXPLANATION_FIELD = Pattern.compile("\"explanation\"\\s*:\\s*\"([^\"]*)");
 	private static final Pattern STEPS_FIELD = Pattern.compile("\"steps\"\\s*:\\s*\"([^\"]*)");
@@ -66,7 +70,7 @@ public class GeminiService {
 
 		try {
 			ResponseEntity<String> response = restTemplate.exchange(requestUrl(), HttpMethod.POST,
-					requestEntity(buildPrompt(vulnerability)), String.class);
+					requestEntity(buildPrompt(vulnerability), GENERATOR_TEMPERATURE), String.class);
 			JsonNode candidate = firstCandidate(readEnvelope(response));
 			String finishReason = candidate.path("finishReason").asText("STOP");
 			String rawContent = candidate.path("content").path(PARTS).get(0).path("text").asText();
@@ -74,6 +78,30 @@ public class GeminiService {
 		} catch (Exception e) {
 			log.error("Gemini API call failed: {}", e.getMessage());
 			return fallback(vulnerability);
+		}
+	}
+
+	/**
+	 * Second call of the double-call scoring: asks the model, as an independent reviewer, to score a
+	 * suggestion that was already generated. Empty when no key is set or the reply is unusable, so the
+	 * caller keeps the self-reported confidence.
+	 */
+	public OptionalDouble judgeFixSuggestion(Vulnerability vulnerability, AiSuggestionResult suggestion) {
+		if (apiKey == null || apiKey.isEmpty()) {
+			return OptionalDouble.empty();
+		}
+		try {
+			ResponseEntity<String> response = restTemplate.exchange(requestUrl(), HttpMethod.POST,
+					requestEntity(FixSuggestionJudge.buildPrompt(vulnerability, suggestion), JUDGE_TEMPERATURE), String.class);
+			String reply = firstCandidate(readEnvelope(response)).path("content").path(PARTS).get(0).path("text").asText();
+			OptionalDouble score = FixSuggestionJudge.parseScore(reply);
+			if (score.isEmpty()) {
+				log.warn("Gemini judge reply had no usable score: {}", preview(reply));
+			}
+			return score;
+		} catch (Exception e) {
+			log.warn("Gemini judge call failed: {}", e.getMessage());
+			return OptionalDouble.empty();
 		}
 	}
 
@@ -91,7 +119,7 @@ public class GeminiService {
 	 * contents[0].parts[0].text + generationConfig.responseMimeType=application/json —
 	 * built via Jackson (not string interpolation) so prompt text is escaped correctly.
 	 */
-	private HttpEntity<String> requestEntity(String prompt) throws JsonProcessingException {
+	private HttpEntity<String> requestEntity(String prompt, double temperature) throws JsonProcessingException {
 		ObjectNode requestRoot = objectMapper.createObjectNode();
 		ArrayNode contents = requestRoot.putArray("contents");
 		ObjectNode contentEntry = contents.addObject();
@@ -99,7 +127,7 @@ public class GeminiService {
 		parts.addObject().put("text", prompt);
 
 		ObjectNode generationConfig = requestRoot.putObject("generationConfig");
-		generationConfig.put("temperature", 0.3);
+		generationConfig.put("temperature", temperature);
 		// 600 was cutting JSON responses off mid-string on gemini-flash-latest —
 		// raised so the model has room to finish the object before hitting the cap.
 		generationConfig.put("maxOutputTokens", 2048);

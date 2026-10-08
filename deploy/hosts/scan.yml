@@ -28,6 +28,7 @@ services:
       - SONAR_TOKEN=${SONAR_TOKEN:-}
       # AI fix suggestions: gemini (default), deepseek or claude
       - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - AI_JUDGE_ENABLED=${AI_JUDGE_ENABLED:-true}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - CLAUDE_API_KEY=${CLAUDE_API_KEY:-}
